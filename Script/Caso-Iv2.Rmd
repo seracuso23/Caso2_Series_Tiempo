@@ -1,0 +1,1101 @@
+---
+title: "Impacto de la Crisis Sanitaria por COVID-19 sobre los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero"
+bibliography: references.bib
+biblio-style: "apalike"
+link-citations: true
+date: "`r format(Sys.Date(),'%d/%m/%y')`"
+header-includes:
+   - \usepackage[spanish]{babel}
+   - \usepackage{booktabs}
+   - \usepackage{multirow}
+   - \usepackage{float}
+   - \usepackage{setspace}
+   - \singlespacing
+   - \usepackage{lipsum}
+   - \linespread{1.5} 
+   - \DeclareUnicodeCharacter{0301}{\'{e}}
+indent: true
+always_allow_html: yes
+author:
+  - Sergio Cubero-Soto, Estadística, Universidad de Costa Rica
+abstract: >
+ por definir  
+output: 
+ bookdown::pdf_document2: 
+    toc: no
+    toc_depth: 4
+    fig_width: 8
+    fig_height: 4
+    fig_caption: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = F, warning = F, message = F,comment = "",fig.pos = "H",fig.align = "center")
+
+setwd("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos")
+
+options(scipen = 999)
+```
+
+```{r paquetes}
+
+library(tidyverse)
+library(forecast)
+#library(lubridate)
+library(readxl)
+#library(xts)
+library(seasonal)
+library(grid)
+library(gridExtra)
+library(tseries)
+library(astsa)
+library(tsoutliers)
+library(urca)
+library(tsDyn)
+```
+
+```{r}
+getPerformance = function(pred, val) {
+    res = pred - val
+    MAE = sum(abs(res))/length(val)
+    RSS = sum(res^2)
+    MSE = RSS/length(val)
+    RMSE = sqrt(MSE)
+    perf = data.frame(MAE, RSS, MSE, RMSE)
+    return(perf)
+}
+```
+
+# Introducción
+
+La crisis sanitaria por el COVID 19 ha impactado la conducta de los diferentes agentes económicos las cuales son importantes identificar ya que podrían profundizar aún más la crisis económica que se desarrolla actualmente. Este cambio en las conductas se observa desde el primer caso de COVID - 19 en Costa Rica y aún persiste en el 2021, en gran parte debido a la incertidumbre sobre el futuro de la pandemia, en términos de duración y profundidad.
+
+Países como Costa Rica se han visto severamente afectados por esta crisis sanitaria y económica ya que poseen una apertura comercial internacional bastante alta y los expone a choques en la economía internacional, de acuerdo con el BCCR, gran medida de estos choque de las economías externas se deben a las medidas sanitarias impuestas por las grande economías mundiales como medida para evitar la propagación del virus, ocasionando la interrupción de la producción y distribución global, así como el cierre de fronteras, esta última con severas consecuencias en el sector turístico de Costa Rica [@bccr1].
+
+Aunado a esto, las familias se vieron severamente impactadas por esta interrupción provocando una disminución en sus ingresos debido al impacto negativo que tiene la crisis en el mercado laboral, debido a lo anterior los hogares mostraron una reducción en el consumo de bienes y servicios [@bccr1].
+
+Los bancos centrales del mundo, como medida de re-activación de la economía, especialmente, por la vía del otorgamiento del crédito para consumo o productivo, establecieron una reducción en las tasas de interés, tomando una posición de política monetaria expansiva y contra cíclico; Costa Rica es uno de los países que siguió esta vía para atenuar el decaimiento de la actividad económica.
+
+Con respecto a los mercados financieros internacionales, la incertidumbre de la pandemia a provocado un gran volatilidad, ya que los agentes económicos buscan refugiarse en activos líquidos, que de acuerdo con el Banco Central de Costa Rica [@bccr1] :
+
+> *esto trae como consecuencia aumento de la prima por riesgo sobre la deuda de mercados emergentes, que ha contrarrestado para esos países la caída en las tasas de interés en las economías avanzadas.*
+
+Conforme la pandemia por COVID-19 evoluciona, las medidas sanitarias se flexibilizan para mitigar la crisis económica ocasionada. De acuerdo con el BCCR en la revisión del Programa Macroeconómico 2021-2022 [@bccr2], el desempeño de la economía Costarricense muestra mejoras con respecto al año 2020 en aspectos como el desempleo, exportaciones  y la recaudación fiscal, sin embargo, se mantiene la incertidumbre de la duración de la pandemia y su rumbo en términos sanitarios, ya que como afirman muchos especialistas el país el aumento en los casos puede ocasionar una tercera ola [@ccp3].
+
+En Costa Rica, dada la crisis económica y sanitaria, los agentes económicos, como es de esperarse en tiempos de crisis e incertidumbre, optan por tomar una posición de refugiarse en activos líquidos y menos en ahorros de depósito a plazo [@bccr2] . Esta conducta está fundamentada ya que los agentes desean tener el dinero disponible inmediatamente para hacer frente a cualquier situación inesperada provocada por la crisis sanitaria y económica. De acuerdo a los datos de la SUGEVAL en el informe del mercado de valores de Costa Rica I Trimestre 2021 [@sugeval5] :
+
+> La industria de fondos de inversión reportó al primer trimestre del año 2021 un crecimiento del 22 por ciento en el activo neto administrado con respecto al mismo periodo del año 2020, donde los fondos de inversión del mercado de dinero son los que reportan el mayor crecimiento (38 por ciento).
+
+Los activos líquidos se pueden distinguir entre ahorros a la vista en cuentas de ahorros y/o corrientes (administrados por el sistema bancario) y las inversiones en fondos de inversión, estos últimos se desarrollan en el mercado de valores para lo cual el inversionista debe recurrir a las Sociedades de Administración de Fondos de Inversión, que como su nombre lo expresa, su función es administrar fondos de inversión.
+
+Como se mencionó anteriormente, los agentes económicos en épocas de crisis económica buscan refugiarse en activos líquidos, especialmente, los que muestran tasas mayores rendimientos, por lo cual, el presente documento brinda detalle exclusivamente sobre los fondos de inversión financieros a la vista de corto plazo (compra de títulos valores), en los cuales se diferencian por la facilidad que tiene el inversionista para retirar el dinero cuando lo desea, en otras palabras, no está limitado a un plazo [@bncr4] .
+
+Los fondos de inversión financieros a la vista de corto plazo se puede evaluar por medio de activo neto de inversión, el cual representa el dinero total invertido (participación) por las personas y que están respaldados por títulos valores [@bncr4] .
+
+El rendimiento del fondo se define a partir de los títulos valores que componen y que se negocian en el mercado. Los títulos valores se negocian en el mercado de valores y tienen un precio el cual se establece de acuerdo a las expectativas de los agentes que los venden y su contraparte, el comprador, y a partir de este precio se calculan los rendimientos, y el conjunto de estos rendimientos definen las rentabilidades de las participaciones en el fondo.
+
+Es importante resaltar que cada título que se negocia en el mercado de valores tiene una tasa, la cual varía de acuerdo al mercado y se ve influencia en cierto grado (no de forma directa ni unitaria) por la tasa de política monetaria que dicta el BCCR.
+
+El BCCR en el 2021 tomó la decisión de realizar una política monetaria expansiva aún más profunda [@bccr2]:
+
+> ... Esta política busca contribuir en el proceso de recuperación de la actividad económica y garantizar la estabilidad del sistema financiero. Así, el Banco Central ha reducido su Tasa de Política Monetaria en 450 puntos base (p.b.) entre marzo de 2019 y julio de 2021.
+
+Dado lo anterior, existe un riesgo materializable de una reducción en el saldo activo neto administrado ocasionado por una salida de inversionista producto de la crisis sanitaria y económica provocada por el COVID-19. Este evento podría producir una profundización de la crisis económica incidiendo en las políticas macroprudenciales del sistema financiero.
+
+Este trabajo tiene como objetivo estimar el efecto de una potencial caída abrupta de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones y dólares en Costa Rica para diciembre 2021, con el fin que los entes reguladores tomen medidas preventivas ante este escenario. **Revisar el para que**
+
+# Métodos
+
+## Datos
+
+Para implementar el modelo de estimación de los volúmenes mensuales[^1] del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en millones colones y dolares en Costa Rica para el periodo de febrero-2001 a julio-2021 (246 observaciones)[^2].
+
+[^1]: Los valores mensuales se obtuvieron a partir del último día habil del mes.
+
+[^2]: Los datos fueron obtenidos a partir de la información publicada en la Superintendencia General de Valores de Costa Rica publicada en : <https://aplicaciones.sugeval.fi.cr/InformesEstadisticas/InformesDiarios>
+
+## Series de Tiempo: Modelos de Pronostico
+
+El análisis de la serie comprende la descripción de la serie temporal donde se indica su comportamiento, identificación de valores extremos sus componentes (estacional, tendencia-ciclo y irregular), linealidad de la serie cronológica y identificación si la serie es estacionaria.
+
+El estudio utiliza diferentes metodologías de pronostico como modelos lineales, no lineales y de minería de datos, los cuales se detallaran en los siguientes apartados. Una vez estimados se seleccionó el mejor de cada uno para posteriormente realizar un ensamble de modelos.
+
+Para seleccionar el mejor modelo dentro de cada uno de los grupos de modelos (lineales, no lineales y de minería de datos) se utilizó el criterio AICc y la Raíz del Error Cuadrático Medio (RMSE).
+
+### Lineales
+
+Un serie estocástica ${x}_{t}$ es lineal si se puede expresar como:
+
+$${x}_{t}= \mu +  \sum_{t=0}^{\infty} \psi_{t}a_{t-i}$$ Donde $\mu$ es una constante $\psi_{t}$ es un número real con $\psi_{0}=1$ y $a_{t}$ es una secuencia de variables aleatorias idénticamente distribuidas e independientes.
+
+Para probar y seleccionar los mejores modelos lineales se seleccionó una muestra de la serie de tiempo considerando los periodos de ene-2011 a julio 2021. A partir de esta muestra a se realiza la separación de la series en un set de datos de entrenamiento, el cual comprende el 80% del periodo; y un set de datos de prueba, el cual comprende el 20% de los periodos más recientes de la serie, con el objetivo de generar un análisis robusto de las estimaciones producidas por los modelos empleados . [@HyndmanAthanasopoulos]
+
+#### Modelo de suavizamiento exponencial Holt-Winter
+
+El modelo de suavizamiento exponencial Holt-Winter es una modificación al método Holt, ya que este no solo considerar la tendencia, sino la estacionalidad. Esto metodo tiene dos variantes en la que considera la tendencia de forma multiplicativa o aditiva.
+
+Este modelo estima los parámetros $\alpha$ , $\beta$ y $\gamma$, y se estiman minimizando la suma de cuadrados del error de pronóstico [@HernandezRodriguez2001; @HyndmanAthanasopoulos].
+
+Este método esta basado en 4 ecuaciones las cuales se detallan a continuación [@HernandezRodriguez2001]:
+
+-   Ecuación 1: Estimación del nivel promedio de la serie en el tiempo $t$ para el caso multiplicativo:$$a_{t} = \alpha \frac{Z_{t}}{S_{t-s}}+(1-\alpha)(a_{t-1}+b_{t-1})$$
+
+    Para el caso aditivo es:
+
+    $$a_{t} = \alpha (Z_{t}-S_{t-s})+(1-\alpha)(a_{t-1}+b_{t-1})$$
+
+    Como se observa en la ecuación anterior a la serie original $Z_{t}$ se le resta el componente estacional $S_{t-s}$, principal diferencia respecto al modelo de Holt.
+
+-   Ecuación 2: Estimación de la pendiente en el tiempo $t$ $$b_{t} = \beta (a_{t}-a_{t-1})+(1-\beta)b_{t-1}$$
+
+-   Ecuación 3: Estimación de la estacionalidad. Para el caso multiplicativo es:$$S_{t} = \gamma \frac{Z_{t}}{a_{t}} + (1 - \gamma) S_{t-s}$$
+
+    Para el caso aditivo es:
+
+    $$S_{t} = \gamma (Z_{t}-a_{t}) + (1 - \gamma) S_{t-s}$$
+
+-   Ecuación 4: Pronostico de la serie, donde $m$ es la cantidad de periodos a pronosticar. Para el caso multiplicativo es:
+
+    $$P_{t+m} = (a_{t}+b_{t}m)S_{t-s+m}$$
+
+    Para el caso aditivo es
+
+$$P_{t+m} = a_{t}+b_{t}m+S_{t-s+m}$$
+
+#### Modelos univariantes autorregresivos integrados de media movil (ARIMA)
+
+Los modelos univariantes autorregresivos integrados de media móvil (ARIMA), utilizados por el enfoque Box-Jenkins, son una representación teórica de las posibles observaciones de una serie cronológica definida mediante una ecuación que incorpora elementos probabilísticos.
+
+Esta metodología es adecuada para series temporales estacionarias, en otras palabras, que su media sea constante en el tiempo y que su varianza no este relaciona con el tiempo, ademas de que la correlación entre valores de la serie separados por $k$ periodos dependa solo de $k$ y es constante para todo $t$
+
+Cada uno de estos procesos están relacionados con una función de autocorrelación teórica y una función de autocorrelación parcial teórica que lo caracteriza. Bajo el enfoque de Box-Jenkins, se debe comparar la funciones de autocorrelación muestral y la función de autocorrelación parcial, con sus respectivas funciones teóricas con el propósito de identificar el proceso probabilístico ARIMA que representa a la serie de tiempo.[@HernandezRodriguez2001]
+
+Posterior a la identificación se procede a estimar los parámetros que lo definen y seguidamente se realiza un diagnostico evaluando los residuos en aspectos como normalidad y la autocorrelación de los residuos. Para el caso de la normalidad se utilizan los histogramas y la prueba Jarque-Bera, por otro lado para analizar la autocorrelación de los residuos se utiliza la prueba de Ljung-Box.
+
+Para este estudio se utiliza el modelo ARIMA no estacional, la cual tiene como forma abreviada:
+
+$$ARIMA(p,d,q)$$ donde $p$ es el proceso Autoregresivo, $d$ es la Diferenciación no estacional y $q$ es el proceso de Medias Móviles. Este modelo se puede escribir mediante el operador de rezagos $B$ como:
+
+$$\varphi (B) \bigtriangledown^{d} \widetilde{Z}_{t} = \theta(B) a_{t}$$ Donde los componentes:
+
+$$AR(p)=\varphi (B)= 1-\varphi_{1}B....-\varphi_{p}B^{p}$$ $$MA(p)=\theta (B)= 1-\theta _{1}B....-\theta _{p}B^{p}$$
+
+### No Lineales
+
+### Minería de Datos
+
+### Métricas de Rendimiento
+
+Para la comparación de los modelos se plantean métricas de rendimiento y criterios de información para la selección del mejor modelo. Entre las medidas de rendimiento están:
+
+**Error Absoluto Medio (MAE)**
+
+$$MAE=\frac{\sum_{t=1}^{T}| y_{t}-\hat{y_{t}|}}{T}$$
+
+**Error Cuadrático Medio (MSE)**
+
+$$MSE=\frac{\sum_{t=1}^{T}(y_{t}-\hat{y_{t}})^2}{T}$$
+
+Cabe resaltar que el estudio se llevo a cabo con el paquete estadístico R [@Rstudio ].
+
+## Prueba de tensión
+
+# Resultado
+
+El presente apartado esta dividido en dos secciones las cuales muestran los resultados obtenidos que buscan respaldar el objetivo planteado. La primera sección se compara y selecciona el mejor modelo de pronostico de serie de tiempo según el tipo de modelo: lineales, no lineales y de minería de datos, para posteriormente, realizar un ensamble con los mejores tres métodos. La segunda sección presenta una prueba de tensión en el cual se plantearán diferentes escenarios para estimar el potencial impacto de una caída abrupta de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones y dólares en Costa Rica para diciembre 2021.
+
+## Pronóstico
+
+En la figura \@ref(fig:evolucionserie) se muestran los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones y dolares para febrero-2001 a julio-2021 y de la cual se genera el análisis para identificar las siguientes características: tendencias o ciclos, existencia de estabilidad en las observaciones, variancia de las observaciones (constante o variable en el tiempo), existencia de observaciones inusuales y de puntos extremos, cambios en la estructura de la serie, entre otras.
+
+```{r serie datos}
+
+SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
+  janitor::clean_names()%>%
+  mutate(ActivoNeto=paste0(activo_neto,"-01"))%>%
+  rename('ActNetCRC'=crc,
+         'ActNetUSD'=usd)
+
+actnetcrc<- ts(SeriesDatos[,2],start =c(2001,2),end=c(2021,7), frequency = 12)
+actnetusd<- ts(SeriesDatos[,3],start =c(2001,2),end=c(2021,7), frequency = 12)
+actnet <- cbind(actnetcrc,actnetusd) 
+
+fitcrc<-actnetcrc %>% 
+  seas() 
+
+fitusd<- actnetusd %>% 
+  seas() 
+
+```
+
+```{r evolucionserie, fig.cap="Costa Rica:Evolución de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+pseries<-autoplot(actnet,facets=TRUE) +
+  xlab("Mes") +
+  ylab("Millones")+
+  theme_bw()
+
+ptendseriecr<-autoplot(actnetcrc, series="Data") +
+  autolayer(trendcycle(fitcrc), series="Tendencia") +
+  #autolayer(seasadj(fitcrc), series="Ajustada Estacionalmente") +
+  xlab("Mes") + ylab("Millones") +
+  scale_colour_manual(values=c("grey70","red","royalblue4"),
+             breaks=c("Data","Ajustada Estacionalmente","Tendencia"))+
+  theme_bw()+
+  ggtitle("Colones")+
+   geom_vline(xintercept = 2015 + (06 - 1) / 12,linetype = "dashed", colour ='gray' )+
+   geom_vline(xintercept = 2016 + (11 - 1) / 12,linetype = "dashed", colour ='gray' )+
+  scale_y_continuous(breaks = seq(0,1200000,200000))
+
+ptendserieusd<-autoplot(actnetusd, series="Data") +
+  autolayer(trendcycle(fitusd), series="Tendencia") +
+  #autolayer(seasadj(fitusd), series="Ajustada Estacionalmente") +
+  xlab("Mes") + ylab("Saldos") +
+  ggtitle("Dolares") +
+  scale_colour_manual(values=c("grey70","red","royalblue4"),
+             breaks=c("Data","Ajustada Estacionalmente","Tendencia"))+
+  theme_bw()+
+   geom_vline(xintercept = 2015 + (06 - 1) / 12,linetype = "dashed", colour ='gray' )+
+   geom_vline(xintercept = 2016 + (12 - 1) / 12,linetype = "dashed", colour ='gray' )+
+  scale_y_continuous(breaks = seq(0,2000,250)) 
+
+grid.arrange(ptendseriecr, ptendserieusd, ncol = 1)
+```
+
+```{r outliers, cache=TRUE}
+
+#https://www.sepg.pap.hacienda.gob.es/sitios/sepg/es-ES/Presupuestos/DocumentacionEstadisticas/Documentacion/Documents/DOCUMENTOS%20DE%20TRABAJO/D95006.pdf
+
+otlier_crc<- tso(y = actnetcrc,types=c("SLS","AO","LS","TC","IO"))
+otlier_crc
+otlier_usd<- tso(y = actnetusd,types=c("SLS","AO","LS","TC","IO"))
+otlier_usd
+
+```
+
+A partir del análisis de la serie se identificaron las siguientes característica:
+
+-   Para ambas series del activo neto , colones y dolares, se observa una tendencia creciente desde febrero 2001, así como un aumento de la variabilidad conforme aumenta los meses.
+
+-   Para el periodo de mayo 2015 a octubre 2016 (lineas punteadas gris) hay un cambio de nivel (Valor extremo LS[^3]) en el volumen mensual del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero tanto en colones como en dolares, sin embargo, es inverso en ambas series, lo cual sugiere que posiblemente los participantes trasladaron sus inversiones de dolares a colones, esto se explica por:
+
+    -   La adopción del régimen de tipo de cambio de flotación administrada por parte del Banco Central de Costa Rica (BCCR) y el incremento en el superávit de divisas del sector privado incidió en la apreciación del colón (disminución del tipo de cambio) [@bccr5].
+
+    -   La reducción de la tasa de interés de política monetaria por parte del BCCR en 300 puntos base en el 2015, con el objetivo de estimular la economía, promoviendo el crecimiento en el crédito nacional y para reducir el costo de la deuda para el gobierno [@mv1; @mv2].
+
+    -   En el último trimestre del 2015, la industria tuvo una contracción de la liquidez en dolares, explicado por la salida de los participantes hacia el mercado internacional [@mv2].
+
+-   Para el activo neto en colones se observa que en abril 2020 el activo neto en colones creció en 19.5 por ciento respecto al mismo periodo del año pasado, este comportamiento creciente y acelerado se mantuvo hasta diciembre de ese mismo año. Lo cual coincide con el efecto de la crisis sanitaria por COVID-19 que inicio en Costa Rica en marzo 2020, esta fecha es identificada como un valor extremo de cambio temporal [^4]. Esta situación sanitaria provocó un aumento de la incertidumbre en la economía mundial incidiendo en que los agentes económicos buscaran refugiarse en activos líquidos [@bccr1]. Un comportamiento similar ocurre para el activo neto en dolares.
+
+[^3]: De acuerdo con [@bdeoutlier]
+
+    -   Level Shift (LS) - Cambio de Nivel: Son valores extremos asociados con el componente tendencia ciclo.
+
+    -   Transitory Change (TC) - Cambio Transitorio y Additive Outliers (AO) Extremos Aditivos: Están asociados a con valores extremos que afecta en componente irregular
+
+    -   Innovative Outlier (IO) o Extremo de Innovación: Es un extremo que simultaneamente afecta el componente tendencia ciclo y al componente estacional
+
+    Para observar los valores extremos y su impacto revisar la figura \@ref(fig:plotoutlier) en anexos.
+
+
+<!-- -->
+
+-   Respecto a la estacionalidad de las series, se observa en la figura \@ref(fig:estacionalidad) que para el caso de colones los saldos del activo neto tienden a ser mayores en enero y octubre, y presentar valores relativamente bajos al finalizar el año noviembre y diciembre, esto es de esperar debido a la época navideña y que diciembre comúnmente se labora 3 de las 4 semana del mes. Para el caso de dolares se observa que los meses con mayores saldos del activo neto se dan de mayo a agosto, y al igual que el caso de colones, se observa que los dos últimos meses del año los mismos se reduce.
+
+```{r estacionalidad,fig.cap="Costa Rica:Indice Estacional de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+pestacioncr <- fitcrc %>% 
+  seasonal() %>% 
+  ggsubseriesplot() + 
+  ylab("Estacionalidad")+
+  theme_bw()+
+  ggtitle("Colones")
+
+pestacionusd <- fitusd %>% 
+  seasonal() %>% 
+  ggsubseriesplot() + 
+  ylab("Estacionalidad")+
+  theme_bw()+
+  ggtitle("Dolares")
+
+grid.arrange(pestacioncr, pestacionusd, nrow = 2,ncol=1)
+
+
+```
+
+Por otro lado, respecto al componente irregular para la serie en colones (ver en el \@ref(anexos), la figura \@ref(fig:descomposicionplotanexo)) ,se comporta de hasta el año 2012, en otras, palabras la variación de la serie no variaba con el nivel de la serie, sin embargo, a partir de 2012 hacia delante se observa que la variación aumenta con el nivel de la serie. En contra parte, para la serie en dolares no se observa una variación similar en todo el periodo y que no varía con respecto al nivel de la serie.
+
+```{r descomposicion}
+fitcrc_add<-actnetcrc %>% 
+  decompose(type = "additive")
+
+fitcrc_multi<-actnetcrc %>% 
+  decompose(type = "multiplicative")
+
+fitusd_add<- actnetusd  %>% 
+  decompose(type = "additive")
+
+fitusd_multi<- actnetusd %>% 
+  decompose(type = "multiplicative")
+
+pdescompcrcadd <- fitcrc_add%>%
+  autoplot() + 
+  xlab("Mes")+
+  ggtitle("Aditiva: Colones") +
+  theme_bw()
+
+pdescompcrcmult<-fitcrc_multi%>%
+  autoplot() + xlab("Mes") +
+  ggtitle("Multiplicativa: Colones")+
+  theme_bw()
+
+pdescompusdadd <- fitusd_add%>%
+  autoplot() + 
+  xlab("Mes")+
+  ggtitle("Aditiva: Dolares") +
+  theme_bw()
+
+pdescompusdmult<-fitusd_multi%>%
+  autoplot() + xlab("Mes") +
+  ggtitle("Multiplicativa: Dolares")+
+  theme_bw()
+
+descompo<-grid.arrange(pdescompcrcadd,pdescompcrcmult, pdescompusdadd,pdescompusdmult, nrow = 2,ncol=2)
+
+```
+
+Para confirmar cual modelo (aditivo o multiplicativo) se ajusta mejor a cada serie se procedió a evaluar si el componente irregular identificando si se ajusta a una distribución normal, para lo cual se realizaron la pruebas de hipótesis de normalidad *Shapiro-Wilk* y *Jarque-Bera,* así como una inspección gráfica por medio de Cuantil- Cuantil (qqplot). En la figura \@ref(fig:irregularcrc) se puede identificar que para el caso de la serie en colones, el mejor modelo es el multiplicativo mientras que para la serie en dolares es el aditivo.
+
+```{r irregularcrc, eval=T, fig.cap="Costa Rica: QQPlot de los residuos de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares por tipo de descomposición, febrero-2001 a julio-2021",fig.align="center"}
+
+Aleatorio_Desc<-cbind(
+  Aleatorio_crc_add=fitcrc_add$random,
+  Aleatorio_crc_multi=fitcrc_multi$random,
+  Aleatorio_usd_add=fitusd_add$random,
+  Aleatorio_usd_multi=fitusd_multi$random)%>%
+  as.data.frame()
+
+jb_res_crc_add<-jarque.bera.test(Aleatorio_Desc$Aleatorio_crc_add[!is.na(Aleatorio_Desc$Aleatorio_crc_add)]) # Cumple
+jb_res_crc_mult<-jarque.bera.test(Aleatorio_Desc$Aleatorio_crc_multi[!is.na(Aleatorio_Desc$Aleatorio_crc_multi)]) # Cumple
+jb_res_usd_add<-jarque.bera.test(Aleatorio_Desc$Aleatorio_usd_add[!is.na(Aleatorio_Desc$Aleatorio_usd_add)]) # Cumple
+jb_res_usd_multi<-jarque.bera.test(Aleatorio_Desc$Aleatorio_usd_multi[!is.na(Aleatorio_Desc$Aleatorio_usd_multi)]) # Cumple
+
+sw_res_crc_add<-shapiro.test(Aleatorio_Desc$Aleatorio_crc_add[!is.na(Aleatorio_Desc$Aleatorio_crc_add)]) # Cumple
+sw_res_crc_mult<-shapiro.test(Aleatorio_Desc$Aleatorio_crc_multi[!is.na(Aleatorio_Desc$Aleatorio_crc_multi)]) # Cumple
+sw_res_usd_add<-shapiro.test(Aleatorio_Desc$Aleatorio_usd_add[!is.na(Aleatorio_Desc$Aleatorio_usd_add)]) # Cumple
+sw_res_usd_multi<-shapiro.test(Aleatorio_Desc$Aleatorio_usd_multi[!is.na(Aleatorio_Desc$Aleatorio_usd_multi)]) # Cumple
+
+## Gráficosde qqplot
+p1<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_crc_add))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Aditiva - Colones") + 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value):Shapiro-Wilk:",round(sw_res_crc_add$statistic,3),",",round(sw_res_crc_add$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_crc_add$statistic,3),",",round(jb_res_crc_add$p.value,4)))+
+  theme_bw()
+
+p2<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_crc_multi))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Multiplicativa - Colones")+ 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value):Shapiro Wilk:",round(sw_res_crc_mult$statistic,3),",",round(sw_res_crc_mult$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_crc_mult$statistic,3),",",round(jb_res_crc_mult$p.value,4)))+
+  theme_bw()
+
+p3<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_usd_add))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Aditiva - Dolares")+ 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value): Shapiro Wilk:",round(sw_res_usd_add$statistic,3),",",round(sw_res_usd_add$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_usd_add$statistic,3),",",round(jb_res_usd_add$p.value,4)))+
+  theme_bw()
+
+p4<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_usd_multi))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Multiplicativa - Dolares")+ 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value): Shapiro Wilk:",round(sw_res_usd_multi$statistic,3),",",round(sw_res_usd_multi$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_usd_multi$statistic,3),",",round(jb_res_usd_multi$p.value,4)))+
+  theme_bw()
+
+grid.arrange(p1,p2,p3,p4,nrow=2, ncol = 2)
+```
+
+```{r series estacionariedad}
+MaxLag2<-length(actnetcrc)/4
+
+## Media Constante
+### Niveles
+# H0: No es estacionario
+# H1: Es estacionario
+adf_org_crc<-adf.test(actnetcrc,alternative="stationary") # Media no constante
+adf_org_usd<-adf.test(actnetusd,alternative="stationary") # Media no constante
+
+## Realiza la prueba de raíz unitaria de Zivot \ & Andrews, que permite una ruptura en un punto desconocido en la intersección, la tendencia lineal o en ambas.
+
+## Esta prueba se basa en la estimación recursiva de una regresión de prueba. El estadístico de prueba se define como el estadístico t mínimo del coeficiente de la variable endógena rezagada.
+
+## Recuérdese que en las pruebas a evaluar la hipótesis nula es presencia de raíz unitaria, mientras que la alternativa es estacionariedad.
+
+## La prueba es muy sensible, realice pruebas y siempre daba resultados o pvalues diferente para una distribucion normal 1 , 0
+
+za_org_crc<-ur.za(window(actnetcrc,start=c(2001,2),end=c(2020,2)), model="both")
+summary(za_org_crc)
+plot(za_org_crc)
+
+time(actnetcrc)[171]
+
+za_org_usd<-ur.za(window(actnetusd,start=c(2001,2),end=c(2020,3)), model="both")
+summary(za_org_usd)
+plot(za_org_usd)
+time(actnetusd)[155]
+```
+
+En relación a la estacionariedad[^5] de las series, ambas no cumplen con dicha condición ya que presentan tendencia creciente y por ende no tienen media constante en el tiempo. Para confirmar esto realiza la prueba de hipótesis de Dickey-Fuller aumentada donde lo hipótesis nula es que la serie tiene raíz unitaria (proceso no estacionario), en ambos casos no se rechaza la hipótesis nula (Serie Colones: estadístico: `r adf_org_crc$statistic` y valor-p: `r adf_org_crc$p.value` y la Serie Dolares: estadístico: `r adf_org_usd$statistic` y valor-p: `r adf_org_usd$p.value`), y se puede observar que la Función de Autocorrelación Simple Muestral (ACF) decae lentamente a 0 (Figuras \@ref(fig:acfpacfseriescrc) y \@ref(fig:acfpacfseriesusd)), esto sugiere que para realizar estacionaria las series se podrían transformar a logaritmo y diferenciar.
+
+[^5]: De acuerdo con [@HernandezRodriguez2001] se dice que una serie es estacionaria cuando: " la media es la misma en cualquier momento t, lo mismo que su varianza" (pág. 70)
+
+    Una serie es estacionaria en sentido débil si cumple tres condiciones:
+
+    1.  La media de $${Z}_{t}$$ es la misma encualquier tiempo ${t}$.
+
+    2.  La varianza de ${Z}_{t}$ es la misma en cualquier tiempo ${t}$
+
+    3.  La correlación entre dos valores de la serie en dos periodos de tiempo, depende solo del intervalo de tiempo que los separa.
+
+```{r acfpacfseriescrc, fig.cap="Función de autocorrelación y autocorrelación parcial estimadas de la serie de cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones, febrero 2001 a diciembre-2020"}
+
+autocorrecrc<-acf2(actnetcrc,max.lag = MaxLag2)
+#actnetcrc%>% ggtsdisplay(main="Colones")
+
+
+```
+
+```{r acfpacfseriesusd, fig.cap="Función de autocorrelación y autocorrelación parcial estimadas de la serie de cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares, febrero 2001 a diciembre-2020"}
+
+autocorreusd<-acf2(actnetcrc,max.lag = MaxLag2)
+# actnetusd%>% ggtsdisplay(main="Dolares")
+
+```
+
+
+```{r variabilidadseries, fig.cap="Evolución de la variabilidad de la serie cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares, febrero 2001 a diciembre-2020"}
+variabilidad_crc <- log(actnetcrc)/log(stats::lag(actnetcrc,1))
+variabilidad_usd <- log(actnetusd)/log(stats::lag(actnetusd,1))
+
+pvariabilidad_crc<-autoplot(variabilidad_crc)+ theme_bw()+ ggtitle('Colones')+
+  scale_y_continuous(limits = c(0.75,1.1))
+pvariabilidad_usd <- autoplot(variabilidad_usd)+ theme_bw()+ ggtitle('Dolares')+
+  scale_y_continuous(limits = c(0.75,1.1))
+
+grid.arrange(pvariabilidad_crc,pvariabilidad_usd,nrow=1,ncol=2)
+```
+
+
+### Modelos Lineales
+
+A partir del análisis exploratorio realizado de las series se procede a estimar modelos de pronóstico lineales:
+
+-   Modelo de Suavizamiento Exponencial Holt-Winter Aditivo
+
+-   Modelo de Suavizamiento Exponencial Holt-Winter Multiplicativo
+
+-   3 Modelos univariantes autorregresivos integrados de media movil (ARIMA)
+
+De estos cinco modelos estimados se selecciona el modelo que presente mejor
+
+```{r datos muestra}
+## Peridos de Tiempo
+inicio_train<- c(2011,1)
+fin_train<- c(2020,12)
+
+inicio_test <- c(2021,1)
+
+sactnetcrc<- window(actnetcrc,start=inicio_train)
+sactnetcrc_train<- window(actnetcrc,start=inicio_train, end=fin_train)
+sactnetcrc_test<- window(actnetcrc,start=inicio_test)
+
+sactnetusd<- window(actnetusd,start=inicio_train)
+sactnetusd_train<- window(actnetusd,start=inicio_train, end=fin_train)
+sactnetusd_test<- window(actnetusd,start=inicio_test)
+
+h.param <- length(sactnetcrc_test)
+```
+
+**Serie en Colones**
+
+```{r holt winter crc modelos, results = FALSE}
+ht2_multi <- hw(sactnetcrc_train,seasonal="multiplicative",h = h.param)
+ht2_add <- hw(sactnetcrc_train,seasonal="additive",h = h.param)
+
+# summary(ht2_multi)
+# summary(ht2_add)
+
+```
+
+```{r holt winter crc rendimiento, results = FALSE}
+Metricas_HW<-data.frame(
+      Modelo=c(rep("Holt Winter Multiplicativo",2),rep("Holt Winter Aditivo",2)),
+      Dataset= rep(c("Entrenamiento","Prueba"),2),
+      rbind(h2multi=accuracy(ht2_multi,sactnetcrc_test),h2aditive=accuracy(ht2_add,sactnetcrc_test)))%>%
+  select(Modelo,Dataset,RMSE,MAE)%>%
+  mutate(MSE=(RMSE)^2)
+```
+
+```{r arima crc seas model, eval=T, echo=F}
+## x13 ARIMA SEAS
+#################################################
+## Ajustar modelo con x13arima seats
+# actnetcrcfittrain<- seas(sactnetcrc_train)
+# view(actnetcrcfittrain)
+# 
+# logactnetcrcfittrain<- seas(logsactnetcrc_train)
+# view(logactnetcrcfittrain)
+
+modelseas1<-
+seas(
+x = sactnetcrc_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = c("ls2015.May", "ao2020.Mar"),
+arima.model = "(2 1 0)(1 0 1)"
+)
+
+modelseas1<-seas(
+x = sactnetcrc_train
+)
+
+view(modelseas1)
+
+## Modelo fijado
+modelseas2<-seas(
+x = sactnetcrc_train,
+transform.function = "none",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = "ao2020.Mar",
+arima.model = "(0 1 0)(1 0 0)"
+)
+
+modelseas3<- seas(
+x = sactnetcrc_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = "ao2020.Mar",
+arima.model = "(2 1 0)(1 0 0)"
+)
+
+
+# El modelo preferido es el que tiene el valor mínimo en el AIC
+summary(modelseas1) #AICc:  2742 ## Mejor modelo
+# summary(modelseas2) #AICc:  2761 ## Peor Modelo
+# summary(modelseas3) #AICc:  2758 ## Segundo mejor Modelo
+
+
+resseas1<-resid(modelseas1)
+resseas2<-resid(modelseas2)
+resseas3<-resid(modelseas3)
+
+```
+
+```{r arima crc residuos estacionariedad}
+#### Estacionariedad de los residuos
+## Media Constante
+
+adf_res_CRC_1<- adf.test(resseas1 , alternative='stationary')
+adf_res_CRC_2<- adf.test(resseas2 , alternative='stationary')
+adf_res_CRC_3<- adf.test(resseas3 , alternative='stationary')
+
+
+adf_res_CRC_1
+# adf_res_CRC_2
+# adf_res_CRC_3
+```
+
+```{r arima crc residuos autocorrelacion, eval=FALSE}
+#### Autocorrelaciòn de los resiudos
+#####################################
+#Autocorrelacion de los residuales y pruebas gráficas
+## Ljung-Box test
+
+# H0: Independencia de los residuos
+# H1: No Independencia de los residuos
+
+lb_res_CRC_1 <- checkresiduals(modelseas1 , lag=MaxLag2)
+# lb_res_CRC_2 <- checkresiduals(modelseas2 , lag=MaxLag2)
+# lb_res_CRC_3 <- checkresiduals(modelseas3 , lag=MaxLag2)
+
+```
+
+```{r arima crc residuos varianza constante arch, eval=T}
+
+#### Varianza Constante de los residuos
+
+## Varianza Constante ARCH Engle's Test for Residual Heteroscedasticity
+# H0: los residuos son homocedasticos
+# H1: los residuos no son homocedasticos
+
+FinTS::ArchTest(resseas1,lag=12)
+# FinTS::ArchTest(resseas2,lag=12)
+# FinTS::ArchTest(resseas3,lag=12)
+
+autoplot(resseas1^2 )+ theme_bw()
+acf2(resseas1^2, max.lag=MaxLag2)
+```
+
+```{r arima crc residuos normalidad}
+#### Normalidad de los residuos
+
+#####################################
+#Normalidad de los residuales
+
+# H0: La muestra proviene de una distribución normal.
+# H1: La muestra no proviene de una distribución normal.
+
+## Jarque Bera
+
+jb_res_CRC_1<-jarque.bera.test(resseas1) # Cumple
+jb_res_CRC_2<-jarque.bera.test(resseas2) # Cumple
+jb_res_CRC_3<-jarque.bera.test(resseas3) # Cumple
+
+
+jb_res_CRC_1
+# jb_res_CRC_2
+# jb_res_CRC_3
+
+sw_res_CRC_1<-shapiro.test(resseas1) # Cumple
+sw_res_CRC_2<-shapiro.test(resseas2) # Cumple
+sw_res_CRC_3<-shapiro.test(resseas3) # Cumple
+
+sw_res_CRC_1
+# sw_res_CRC_2
+# sw_res_CRC_3
+
+car::qqPlot(resseas1)
+# car::qqPlot(resseas2)
+# car::qqPlot(resseas3)
+
+```
+
+```{r rendimientoproncrc , fig.cap="Raíz del Error Cuadratico Medio de los Modelos Lineales según set de datos (entrenamiento y prueba) para la serie de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en Colones"}
+
+pronostico_CRC_1 <- window(series(modelseas1,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_CRC_2 <- window(series(modelseas2,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_CRC_3 <- window(series(modelseas3,"forecast.forecasts"),start=inicio_test,end=c(2021,7))				
+pronostico_CRC_1_train  <- final(modelseas1)			
+pronostico_CRC_2_train  <- final(modelseas2)					
+pronostico_CRC_3_train  <- final(modelseas3)		
+				
+perfor_crc_train_mod_1 <- getPerformance(pronostico_CRC_1_train, sactnetcrc_train)
+perfor_crc_train_mod_2 <- getPerformance(pronostico_CRC_2_train, sactnetcrc_train)
+perfor_crc_train_mod_3 <- getPerformance(pronostico_CRC_3_train, sactnetcrc_train)
+
+
+perfor_crc_test_mod_1 <- getPerformance(pronostico_CRC_1[,1],sactnetcrc_test)
+perfor_crc_test_mod_2 <- getPerformance(pronostico_CRC_2[,1],sactnetcrc_test)
+perfor_crc_test_mod_3 <- getPerformance(pronostico_CRC_3[,1],sactnetcrc_test)
+
+
+Metricas_Sarima_CRC <- data.frame(
+Modelo = rep(
+c(
+'1.ARIMA(2 1 0)(1 0 1) Log',
+'2.ARIMA(0 1 0)(1 0 0)',
+'3.ARIMA(0 1 0)(1 0 0) Log'
+),
+2
+),
+Dataset = c(rep("Entrenamiento", 3), rep("Prueba", 3)),
+rbind(
+perfor_crc_train_mod_1,
+perfor_crc_train_mod_2,
+perfor_crc_train_mod_3,
+perfor_crc_test_mod_1,
+perfor_crc_test_mod_2,
+perfor_crc_test_mod_3
+)
+)
+
+Metricas_Mod_Lin<- bind_rows(Metricas_HW,Metricas_Sarima_CRC)
+#Metricas_Mod_Lin<- Metricas_Sarima_CRC
+
+ggplot(Metricas_Mod_Lin) +
+  aes(x = Modelo, fill = Dataset, weight = RMSE) +
+  geom_bar() +
+  scale_fill_manual(values = c(Entrenamiento = "#E69999",
+                               Prueba = "#5C7FA7")) +
+  labs(x = "Método", y = "RMSE") +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+
+```
+
+```{r pronostico mejor crc}
+### Holt-Winter Aditivo
+ht2_add_all <- hw(sactnetcrc,seasonal="additive",h = 5)
+autoplot(ht2_add_all)+
+  theme_bw()
+
+### Arima (2,1,0) (1,0,1) Log
+# modelseas1_all<-seas(
+# x = sactnetcrc,
+# transform.function = "log",
+# regression.aictest = NULL,
+# outlier = NULL,
+# regression.save = "hol",
+# regression.variables = c("ls2015.May", "ao2020.Mar"),
+# arima.model = "(2 1 0)(1 0 1)"
+# )
+# 
+# 
+# window(series(modelseas1_all,"forecast.forecasts"),start=c(2021,8),end=c(2021,12))%>%
+#   autoplot()+
+#   theme_bw()
+
+```
+
+**Serie Dolares**
+
+```{r holt winter usd modelos, results = FALSE}
+ht2_multi_usd <- hw(sactnetusd_train,seasonal="multiplicative",h = h.param)
+ht2_add_usd <- hw(sactnetusd_train,seasonal="additive",h = h.param)
+
+summary(ht2_multi_usd)
+summary(ht2_add_usd)
+
+```
+
+```{r holt winter usd rendimiento, results = FALSE}
+Metricas_HW_usd<-data.frame(
+      Modelo=c(rep("Holt Winter Multiplicativo",2),rep("Holt Winter Aditivo",2)),
+      Dataset= rep(c("Entrenamiento","Prueba"),2),
+      rbind(h2multi=accuracy(ht2_multi_usd,sactnetusd_test),h2aditive=accuracy(ht2_add_usd,sactnetusd_test)))%>%
+  select(Modelo,Dataset,RMSE,MAE)%>%
+  mutate(MSE=(RMSE)^2)
+
+```
+
+```{r arima usd seas model, eval=T, echo=F}
+## x13 ARIMA SEAS
+#################################################
+## Ajustar modelo con x13arima seats
+# actnetusdfittrain<- seas(sactnetusd_train)
+# view(actnetusdfittrain)
+
+
+modelseas1_usd<-seas(
+x = sactnetusd_train,
+transform.function = "none",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = "const",
+arima.model = "(0 1 1)"
+)
+
+## Modelo fijado
+modelseas2_usd<-seas(
+x = sactnetusd_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+forecast.save = "fct",
+arima.model = "(0 1 0)(0 1 1)"
+)
+
+modelseas3_usd<- seas(
+x = sactnetusd_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+forecast.save = "fct",
+arima.model = "(0 1 0)(1 1 0)"
+)
+
+# El modelo preferido es el que tiene el valor mínimo en el AIC
+# summary(modelseas1) #AICc:  1317 ## Peor modelo
+# summary(modelseas2) #AICc:  1201 ## Mejor modelo
+summary(modelseas3) #AICc:  1225 ## Segundo mejor Modelo
+
+resseas1_usd<-resid(modelseas1_usd)
+resseas2_usd<-resid(modelseas2_usd)
+resseas3_usd<-resid(modelseas3_usd)
+
+```
+
+```{r arima usd residuos estacionariedad}
+
+#### Estacionariedad de los residuos
+
+## Media Constante
+
+adf_res_usd_1<- adf.test(resseas1_usd , alternative='stationary')
+adf_res_usd_2<- adf.test(resseas2_usd , alternative='stationary')
+adf_res_usd_3<- adf.test(resseas3_usd , alternative='stationary')
+
+
+# adf_res_usd_1
+# adf_res_usd_2
+adf_res_usd_3
+```
+
+```{r arima usd residuos autocorrelacion}
+#### Autocorrelaciòn de los resiudos
+#####################################
+#Autocorrelacion de los residuales y pruebas gráficas
+## Ljung-Box test
+
+# H0: Independencia de los residuos
+# H1: No Independencia de los residuos
+
+# lb_res_usd_1 <- checkresiduals(modelseas1_usd , lag=MaxLag2)
+# lb_res_usd_2 <- checkresiduals(modelseas2_usd , lag=MaxLag2)
+lb_res_usd_3 <- checkresiduals(modelseas3_usd , lag=MaxLag2)
+
+```
+
+```{r arima usd residuos normalidad}
+#####################################
+#Normalidad de los residuales
+
+# H0: La muestra proviene de una distribución normal.
+# H1: La muestra no proviene de una distribución normal.
+
+## Jarque Bera
+
+jb_res_usd_1<-jarque.bera.test(resseas1_usd) # Cumple
+jb_res_usd_2<-jarque.bera.test(resseas2_usd) # Cumple
+jb_res_usd_3<-jarque.bera.test(resseas3_usd) # Cumple
+
+
+# jb_res_usd_1
+# jb_res_usd_2
+jb_res_usd_3
+
+sw_res_usd_1<-shapiro.test(resseas1_usd) # Cumple
+sw_res_usd_2<-shapiro.test(resseas2_usd) # Cumple
+sw_res_usd_3<-shapiro.test(resseas3_usd) # Cumple
+
+# sw_res_usd_1
+# sw_res_usd_2
+sw_res_usd_3
+
+# car::qqPlot(resseas1_usd)
+# car::qqPlot(resseas2_usd)
+car::qqPlot(resseas3_usd)
+
+```
+
+```{r arima usd residuos varianza constante arch, eval=T}
+#### Varianza Constante de los residuos
+## Varianza Constante ARCH Engle's Test for Residual Heteroscedasticity
+# H0: los residuos son homocedasticos
+# H1: los residuos no son homocedasticos
+
+# FinTS::ArchTest(resseas1_usd,lag=12)
+# FinTS::ArchTest(resseas2_usd,lag=12)
+FinTS::ArchTest(resseas3_usd,lag=12)
+
+autoplot(resseas3_usd^2 )+ theme_bw()
+acf2(resseas3_usd^2, max.lag=MaxLag2)
+```
+
+```{r arima usd rendimiento}
+
+### Performance de los modelos
+
+pronostico_usd_1 <- window(series(modelseas1_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_usd_2 <- window(series(modelseas2_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_usd_3 <- window(series(modelseas3_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+
+pronostico_usd_1_train  <- final(modelseas1_usd)			
+pronostico_usd_2_train  <- final(modelseas2_usd)					
+pronostico_usd_3_train  <- final(modelseas3_usd)		
+				
+perfor_usd_train_mod_1 <- getPerformance(pronostico_usd_1_train, sactnetusd_train)
+perfor_usd_train_mod_2 <- getPerformance(pronostico_usd_2_train, sactnetusd_train)
+perfor_usd_train_mod_3 <- getPerformance(pronostico_usd_3_train, sactnetusd_train)
+
+
+perfor_usd_test_mod_1 <- getPerformance(pronostico_usd_1[,1],sactnetusd_test)
+perfor_usd_test_mod_2 <- getPerformance(pronostico_usd_2[,1],sactnetusd_test)
+perfor_usd_test_mod_3 <- getPerformance(pronostico_usd_3[,1],sactnetusd_test)
+
+
+Metricas_Sarima_usd <- data.frame(
+Modelo = rep(
+c(
+'1.ARIMA(0 1 1) Niveles', 
+'2.ARIMA(0 1 0)(0 1 1) Log',
+'3.ARIMA(0 1 0)(1 1 0) Log'
+),
+2
+),
+Dataset = c(rep("Entrenamiento", 3), rep("Prueba", 3)),
+rbind(
+perfor_usd_train_mod_1,
+perfor_usd_train_mod_2,
+perfor_usd_train_mod_3,
+perfor_usd_test_mod_1,
+perfor_usd_test_mod_2,
+perfor_usd_test_mod_3
+)
+)
+
+Metricas_Mod_Lin<- bind_rows(Metricas_HW_usd,Metricas_Sarima_usd)
+#Metricas_Mod_Lin<- Metricas_Sarima_usd
+
+ggplot(Metricas_Mod_Lin) +
+  aes(x = Modelo, fill = Dataset, weight = RMSE) +
+  geom_bar() +
+  scale_fill_manual(values = c(Entrenamiento = "#E69999",
+                               Prueba = "#5C7FA7")) +
+  labs(x = "Método", y = "RMSE", title = "Colones") +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+
+```
+
+```{r pronostico mejor usd}
+### Holt-Winter Aditivo
+ht2_multi_all <- hw(sactnetusd,seasonal="multiplicative",h = 5)
+autoplot(ht2_multi_all)+
+  theme_bw()
+
+```
+
+### Modelos No Lineales
+
+**Serie Colones**
+
+```{r ,eval=F}
+
+mod_crc <- list()
+# SETAR
+# gridSETAR <- selectSETAR(diff(log(sactnetcrc_train)),m=3, thDelay = c(0:2), trim = 0.15, criterion = "AIC")
+# gridSETAR$bests
+mod_crc[["setar"]] <- setar(diff(log(sactnetcrc_train)),m=2,thDelay=0,mL=2,mH=2)
+summary(mod_crc[["setar"]])
+
+# gridLSTAR <- selectLSTAR(log(sactnetcrc_train),m=4)
+# gridLSTAR$bests
+# mod[["lstar"]] <- lstar(log(sactnetcrc_train), mL=3,mH=1,thDelay=3)
+# summary(mod[["lstar"]])
+
+# gridNNET <- selectNNET(diff(log(sactnetcrc_train)),m=12)
+# gridNNET
+mod_crc[["nnet"]] <- nnetTs(diff(log(sactnetcrc_train)),m=2,size=11)
+summary(mod_crc[["nnet"]])
+
+frc.test <- lapply(mod_crc, predict, n.ahead = 12)
+# frc.test
+
+# plot(log(sactnetcrc_test))
+# lines(frc.test$setar, col = "blue")
+# lines(frc.test$nnet, col = "orange")
+# lines(frc.test$lstar, col='green')
+# lines(frc.test$aar, col = "violet")
+sapply(mod_crc, MAPE)
+
+Metrics::rmse(diff(log(sactnetcrc_test)), frc.test$setar)
+# rmse(log(sactnetcrc_test),frc.test$lstar)
+Metrics::rmse(diff(log(sactnetcrc_test)), frc.test$nnet)
+# Metrics::rmse(log(sactnetcrc_test), frc.test$aar)
+
+autoplot(diff(log(sactnetcrc_test)))+
+  autolayer(frc.test$setar)+
+  autolayer(frc.test$nnet)+
+  theme_bw()
+
+```
+
+**Serie Dolares**
+
+```{r ,eval=T}
+
+mod_usd <- list()
+# SETAR
+gridSETAR <- selectSETAR(diff((sactnetusd_train)),m=2, trim = 0.15, criterion = "AIC")
+gridSETAR$bests
+mod_usd[["setar"]] <- setar(diff((sactnetusd_train)),mL=2,mH=1)
+summary(mod_usd[["setar"]])
+
+# gridLSTAR <- selectLSTAR(log(sactnetcrc_train),m=4)
+# gridLSTAR$bests
+# mod[["lstar"]] <- lstar(log(sactnetcrc_train), mL=3,mH=1,thDelay=3)
+# summary(mod[["lstar"]])
+
+gridNNET <- selectNNET(diff((sactnetusd_train)),m=2)
+gridNNET
+mod_usd[["nnet"]] <- nnetTs(diff((sactnetusd_train)),m=2,size=1)
+summary(mod_usd[["nnet"]])
+
+frc.test <- lapply(mod_usd, predict, n.ahead = 12)
+# frc.test
+
+# plot(log(sactnetcrc_test))
+# lines(frc.test$setar, col = "blue")
+# lines(frc.test$nnet, col = "orange")
+# lines(frc.test$lstar, col='green')
+# lines(frc.test$aar, col = "violet")
+sapply(mod_usd, MAPE)
+
+Metrics::rmse(diff((sactnetusd_test)), frc.test$setar)
+# rmse(log(sactnetusd_test),frc.test$lstar)
+Metrics::rmse(diff((sactnetusd_test)), frc.test$nnet)
+# Metrics::rmse(log(sactnetusd_test), frc.test$aar)
+
+autoplot(diff((sactnetusd_test)))+
+  autolayer(frc.test$setar)+
+  autolayer(frc.test$nnet)+
+  theme_bw()
+
+```
+
+# Conclusión
+
+# Anexos
+
+```{r plotoutlier, fig.cap="Costa Rica: Identificación de los valores extremos en los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+# otlier_crc
+plot(otlier_crc)
+# plot(otlier_usd)
+# otlier_usd
+```
+
+```{r descomposicionplotanexo, eval=T, fig.cap="Costa Rica:Descomposición de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+descompo
+```
+
+```{r modelos colones, eval=F}
+texreg::texreg(modelseas1, label = "modelo1crc", caption = "Coeficiente del Modelo",float.pos = "h")
+
+texreg::texreg(modelseas2, label = "modelo2crc", caption = "Coeficiente del Modelo",float.pos = "h")
+
+texreg::texreg(modelseas3, label = "modelo3crc", caption = "Coeficiente del Modelo",float.pos = "h")
+
+```
+
+```{r modelos usd, eval=F}
+texreg::texreg(modelseas1_usd, label = "modelo1crc", caption = "Coeficiente del Modelo",float.pos = "h")
+
+texreg::texreg(modelseas2_usd, label = "modelo2crc", caption = "Coeficiente del Modelo",float.pos = "h")
+
+texreg::texreg(modelseas3_usd, label = "modelo3crc", caption = "Coeficiente del Modelo",float.pos = "h")
+
+```
+
+
+
+[\<https://www.sugeval.fi.cr/informesmercado/DocsInformesemestraldemercado/I%20informe%20semestral%20del%20mercado%20de%20valores%202020.pdf\>](https://www.sugeval.fi.cr/informesmercado/DocsInformesemestraldemercado/I%20informe%20semestral%20del%20mercado%20de%20valores%202020.pdf){.uri}
+
+[\<https://cran.r-project.org/web/views/TimeSeries.html\>](https://cran.r-project.org/web/views/TimeSeries.html){.uri}
