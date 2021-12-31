@@ -1,0 +1,366 @@
+---
+title: 'Caso 1: Análisis Exploratorio'
+author: "Sergio Cubero"
+date: "12/12/2021"
+output: 
+  html_document: 
+    highlight: pygments
+    theme: spacelab
+    toc: true
+    toc_float: true
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, warning = F, message = F,comment = "",fig.pos = "H",fig.align = "center")
+
+options(scipen = 999)
+setwd("/Volumes/GoogleDrive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso_2_Final/Caso2_Series_Tiempo/Script/Script Version 1")
+
+library(tidyverse)
+library(forecast)
+#library(lubridate)
+library(readxl)
+#library(xts)
+library(seasonal)
+library(grid)
+library(gridExtra)
+library(tseries)
+library(astsa)
+library(tsoutliers)
+library(urca)
+library(tsDyn)
+library(TSA)
+library(NTS)
+library(MSwM)
+library(fNonlinear)
+library(dlm)
+library(astsa)
+```
+
+```{r funciones, include=T}
+getPerformance = function(pred, val) {
+    res = pred - val
+    MAE = sum(abs(res))/length(val)
+    RSS = sum(res^2)
+    MSE = RSS/length(val)
+    RMSE = sqrt(MSE)
+    perf = data.frame(MAE, RSS, MSE, RMSE)
+    return(perf)
+}
+```
+
+## Datos
+
+Para implementar el modelo de estimación de los volúmenes mensuales[\^1] del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en millones colones y dolares en Costa Rica para el periodo de febrero-2001 a julio-2021 (246 observaciones)[\^2].
+
+[\^1]: Los valores mensuales se obtuvieron a partir del último día habil del mes.
+
+[\^2]: Los datos fueron obtenidos a partir de la información publicada en la Superintendencia General de Valores de Costa Rica publicada en : <https://aplicaciones.sugeval.fi.cr/InformesEstadisticas/InformesDiarios>
+
+```{r serie datos}
+
+SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
+  janitor::clean_names()%>%
+  mutate(ActivoNeto=paste0(activo_neto,"-01"))%>%
+  rename('ActNetCRC'=crc,
+         'ActNetUSD'=usd)
+
+actnetcrc<- ts(SeriesDatos[,2],start =c(2001,2),end=c(2021,7), frequency = 12)
+actnetusd<- ts(SeriesDatos[,3],start =c(2001,2),end=c(2021,7), frequency = 12)
+actnet <- cbind(actnetcrc,actnetusd) 
+
+fitcrc<-actnetcrc %>% 
+  seas() 
+
+fitusd<- actnetusd %>% 
+  seas() 
+
+```
+
+```{r evolucionserie, fig.cap="Costa Rica:Evolución de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+pseries<-autoplot(actnet,facets=TRUE) +
+  xlab("Mes") +
+  ylab("Millones")+
+  theme_bw()
+
+ptendseriecr<-autoplot(actnetcrc, series="Data") +
+  autolayer(trendcycle(fitcrc), series="Tendencia") +
+  #autolayer(seasadj(fitcrc), series="Ajustada Estacionalmente") +
+  xlab("Mes") + ylab("Millones") +
+  scale_colour_manual(values=c("grey70","red","royalblue4"),
+             breaks=c("Data","Ajustada Estacionalmente","Tendencia"))+
+  theme_bw()+
+  ggtitle("Colones")+
+   geom_vline(xintercept = 2015 + (06 - 1) / 12,linetype = "dashed", colour ='gray' )+
+   geom_vline(xintercept = 2016 + (11 - 1) / 12,linetype = "dashed", colour ='gray' )+
+  scale_y_continuous(breaks = seq(0,1200000,200000))
+
+ptendserieusd<-autoplot(actnetusd, series="Data") +
+  autolayer(trendcycle(fitusd), series="Tendencia") +
+  #autolayer(seasadj(fitusd), series="Ajustada Estacionalmente") +
+  xlab("Mes") + ylab("Saldos") +
+  ggtitle("Dolares") +
+  scale_colour_manual(values=c("grey70","red","royalblue4"),
+             breaks=c("Data","Ajustada Estacionalmente","Tendencia"))+
+  theme_bw()+
+   geom_vline(xintercept = 2015 + (06 - 1) / 12,linetype = "dashed", colour ='gray' )+
+   geom_vline(xintercept = 2016 + (12 - 1) / 12,linetype = "dashed", colour ='gray' )+
+  scale_y_continuous(breaks = seq(0,2000,250)) 
+
+grid.arrange(ptendseriecr, ptendserieusd, ncol = 1)
+```
+
+## Valores Extremos {.tabset}
+
+### Colones
+
+```{r outliers colones, cache=TRUE}
+
+#https://www.sepg.pap.hacienda.gob.es/sitios/sepg/es-ES/Presupuestos/DocumentacionEstadisticas/Documentacion/Documents/DOCUMENTOS%20DE%20TRABAJO/D95006.pdf
+
+otlier_crc<- tso(y = actnetcrc,types=c("SLS","AO","LS","TC","IO"))
+otlier_crc
+plot(otlier_crc)
+```
+
+### Dolares 
+
+```{r outliers dolares, cache=TRUE}
+otlier_usd<- tso(y = actnetusd,types=c("SLS","AO","LS","TC","IO"))
+otlier_usd
+plot(otlier_usd)
+```
+
+## Estacionalidad
+
+```{r estacionalidad,fig.cap="Costa Rica:Indice Estacional de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+pestacioncr <- fitcrc %>% 
+  seasonal() %>% 
+  ggsubseriesplot() + 
+  ylab("Estacionalidad")+
+  theme_bw()+
+  ggtitle("Colones")
+
+pestacionusd <- fitusd %>% 
+  seasonal() %>% 
+  ggsubseriesplot() + 
+  ylab("Estacionalidad")+
+  theme_bw()+
+  ggtitle("Dolares")
+
+grid.arrange(pestacioncr, pestacionusd, nrow = 2,ncol=1)
+
+
+```
+
+## Componentes de las serie
+
+### Descomposición
+```{r descomposicion}
+fitcrc_add<-actnetcrc %>% 
+  decompose(type = "additive")
+
+fitcrc_multi<-actnetcrc %>% 
+  decompose(type = "multiplicative")
+
+fitusd_add<- actnetusd  %>% 
+  decompose(type = "additive")
+
+fitusd_multi<- actnetusd %>% 
+  decompose(type = "multiplicative")
+
+pdescompcrcadd <- fitcrc_add%>%
+  autoplot() + 
+  xlab("Mes")+
+  ggtitle("Aditiva") +
+  theme_bw()
+
+pdescompcrcmult<-fitcrc_multi%>%
+  autoplot() + xlab("Mes") +
+  ggtitle("Multiplicativa")+
+  theme_bw()
+
+pdescompusdadd <- fitusd_add%>%
+  autoplot() + 
+  xlab("Mes")+
+  ggtitle("Aditiva") +
+  theme_bw()
+
+pdescompusdmult<-fitusd_multi%>%
+  autoplot() + xlab("Mes") +
+  ggtitle("Multiplicativa")+
+  theme_bw()
+
+grid.arrange(
+    pdescompcrcadd,
+    pdescompcrcmult,
+    nrow = 1,
+    ncol = 2,
+    top = textGrob("Descomposición de las Serie \n Colones", gp = gpar(fontsize =12, font = 2))
+  )
+
+grid.arrange(
+    pdescompusdadd,
+    pdescompusdmult,
+    nrow = 1,
+    ncol = 2,
+    top = textGrob("Descomposición de las Serie \n Dolares", gp = gpar(fontsize =12, font = 2))
+  )
+```
+
+### Componente Irregular
+
+```{r irregularcrc, eval=T, fig.cap="Costa Rica: QQPlot de los residuos de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares por tipo de descomposición, febrero-2001 a julio-2021",fig.align="center"}
+
+Aleatorio_Desc<-cbind(
+  Aleatorio_crc_add=fitcrc_add$random,
+  Aleatorio_crc_multi=fitcrc_multi$random,
+  Aleatorio_usd_add=fitusd_add$random,
+  Aleatorio_usd_multi=fitusd_multi$random)%>%
+  as.data.frame()
+
+jb_res_crc_add<-jarque.bera.test(Aleatorio_Desc$Aleatorio_crc_add[!is.na(Aleatorio_Desc$Aleatorio_crc_add)]) # Cumple
+jb_res_crc_mult<-jarque.bera.test(Aleatorio_Desc$Aleatorio_crc_multi[!is.na(Aleatorio_Desc$Aleatorio_crc_multi)]) # Cumple
+jb_res_usd_add<-jarque.bera.test(Aleatorio_Desc$Aleatorio_usd_add[!is.na(Aleatorio_Desc$Aleatorio_usd_add)]) # Cumple
+jb_res_usd_multi<-jarque.bera.test(Aleatorio_Desc$Aleatorio_usd_multi[!is.na(Aleatorio_Desc$Aleatorio_usd_multi)]) # Cumple
+
+sw_res_crc_add<-shapiro.test(Aleatorio_Desc$Aleatorio_crc_add[!is.na(Aleatorio_Desc$Aleatorio_crc_add)]) # Cumple
+sw_res_crc_mult<-shapiro.test(Aleatorio_Desc$Aleatorio_crc_multi[!is.na(Aleatorio_Desc$Aleatorio_crc_multi)]) # Cumple
+sw_res_usd_add<-shapiro.test(Aleatorio_Desc$Aleatorio_usd_add[!is.na(Aleatorio_Desc$Aleatorio_usd_add)]) # Cumple
+sw_res_usd_multi<-shapiro.test(Aleatorio_Desc$Aleatorio_usd_multi[!is.na(Aleatorio_Desc$Aleatorio_usd_multi)]) # Cumple
+
+## Gráficosde qqplot
+p1<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_crc_add))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Aditiva") + 
+  labs(subtitle = paste("Shapiro-Wilk:",round(sw_res_crc_add$statistic,3),",",round(sw_res_crc_add$p.value,4), "\nJarque-Bera",round(jb_res_crc_add$statistic,3),",",round(jb_res_crc_add$p.value,4)))+
+  theme_bw()
+
+p2<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_crc_multi))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Multiplicativa")+ 
+  labs(subtitle = paste("Shapiro Wilk:",round(sw_res_crc_mult$statistic,3),",",round(sw_res_crc_mult$p.value,4), "\nJarque-Bera",round(jb_res_crc_mult$statistic,3),",",round(jb_res_crc_mult$p.value,4)))+
+  theme_bw()
+
+p3<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_usd_add))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Aditiva")+ 
+  labs(subtitle = paste("Shapiro Wilk:",round(sw_res_usd_add$statistic,3),",",round(sw_res_usd_add$p.value,4), "\nJarque-Bera",round(jb_res_usd_add$statistic,3),",",round(jb_res_usd_add$p.value,4)))+
+  theme_bw()
+
+p4<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_usd_multi))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Multiplicativa")+ 
+  labs(subtitle = paste("Shapiro Wilk:",round(sw_res_usd_multi$statistic,3),",",round(sw_res_usd_multi$p.value,4), "\nJarque-Bera",round(jb_res_usd_multi$statistic,3),",",round(jb_res_usd_multi$p.value,4)))+
+  theme_bw()
+
+grid.arrange(p1,p2,nrow=2, ncol = 1,
+    top = textGrob("Componente Irregular: Pruebas de Normalidad \n (Estadístico,P-Value) \n Serie  Colones", gp = gpar(fontsize =15, font = 2)))
+grid.arrange(p3,p4,nrow=2, ncol = 1,
+    top = textGrob("Componente Irregular: Pruebas de Normalidad \n (Estadístico,P-Value) \n Serie  Dolares", gp = gpar(fontsize =15, font = 2)))
+```
+
+## Estacionariedad
+
+```{r series estacionariedad}
+MaxLag2<-length(actnetcrc)/4
+
+## Media Constante
+### Niveles
+# H0: No es estacionario
+# H1: Es estacionario
+adf_org_crc<-adf.test(actnetcrc,alternative="stationary") # Media no constante
+adf_org_usd<-adf.test(actnetusd,alternative="stationary") # Media no constante
+
+## Realiza la prueba de raíz unitaria de Zivot \ & Andrews, que permite una ruptura en un punto desconocido en la intersección, la tendencia lineal o en ambas.
+
+## Esta prueba se basa en la estimación recursiva de una regresión de prueba. El estadístico de prueba se define como el estadístico t mínimo del coeficiente de la variable endógena rezagada.
+
+## Recuérdese que en las pruebas a evaluar la hipótesis nula es presencia de raíz unitaria, mientras que la alternativa es estacionariedad.
+
+## La prueba es muy sensible, realice pruebas y siempre daba resultados o pvalues diferente para una distribucion normal 1 , 0
+
+za_org_crc<-ur.za(window(actnetcrc,start=c(2001,2),end=c(2020,2)), model="both")
+summary(za_org_crc)
+plot(za_org_crc)
+
+time(actnetcrc)[171]
+
+za_org_usd<-ur.za(window(actnetusd,start=c(2001,2),end=c(2020,3)), model="both")
+summary(za_org_usd)
+plot(za_org_usd)
+time(actnetusd)[155]
+```
+
+```{r acfpacfseriescrc, fig.cap="Función de autocorrelación y autocorrelación parcial estimadas de la serie de cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones, febrero 2001 a diciembre-2020"}
+
+autocorrecrc<-acf2(actnetcrc,max.lag = MaxLag2,main="Colones")
+#actnetcrc%>% ggtsdisplay(main="Colones")
+
+
+```
+
+```{r acfpacfseriesusd, fig.cap="Función de autocorrelación y autocorrelación parcial estimadas de la serie de cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares, febrero 2001 a diciembre-2020"}
+
+autocorreusd<-acf2(actnetcrc,max.lag = MaxLag2,main="Dolares")
+# actnetusd%>% ggtsdisplay(main="Dolares")
+
+```
+
+## Linealidad de la Serie {.tabset}
+
+### Teraesvirta NN test for neglected nonlinearity
+```{r}
+crclineal<-fNonlinear::tnnTest(actnetusd, lag = 1, title = "Colones", description = NULL)
+
+crclineal
+
+
+usdlineal<-fNonlinear::tnnTest(actnetcrc, lag = 1, title = "Dolares", description = NULL)
+
+usdlineal
+```
+
+### Kennan tests for nonlineary
+
+```{r}
+# Kennan tests for nonlineary
+# 
+# La hipótesis nula de que la serie de tiempo sigue algún proceso de AR.
+Keenan.test(log(actnetcrc))
+Keenan.test(log(actnetcrc), order=1)
+Keenan.test(log(actnetcrc), order=2)
+Keenan.test(log(actnetcrc), order=3)
+
+Keenan.test(log(actnetusd))
+Keenan.test(log(actnetusd), order=1)
+Keenan.test(log(actnetusd), order=2)
+Keenan.test(log(actnetusd), order=3)
+```
+
+## Variabilidad de la serie
+
+```{r variabilidadseries , fig.cap="Evolución de la variabilidad de la serie cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares, febrero 2001 a diciembre-2020"}
+variabilidad_crc <- log(actnetcrc)/log(stats::lag(actnetcrc,1))
+variabilidad_usd <- log(actnetusd)/log(stats::lag(actnetusd,1))
+
+pvariabilidad_crc<-autoplot(variabilidad_crc)+ theme_bw()+ ggtitle('Colones')+
+  scale_y_continuous(limits = c(0.75,1.1))+
+  ylab("Variabilidad")
+pvariabilidad_usd <- autoplot(variabilidad_usd)+ theme_bw()+ ggtitle('Dolares')+
+  scale_y_continuous(limits = c(0.75,1.1))+
+  ylab("Variabilidad")
+
+grid.arrange(pvariabilidad_crc,pvariabilidad_usd,nrow=1,ncol=2,
+             top = textGrob("Evolución de la variabilidad de la serie cronológica de los saldos del \nActivo Neto Administrado de los Fondos de Inversión del\n Mercado de Dinero", gp = gpar(fontsize =13, font = 2)))
+
+#
+```
