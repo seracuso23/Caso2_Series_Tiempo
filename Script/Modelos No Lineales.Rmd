@@ -22,7 +22,7 @@ library(tidyverse)
 library(readxl)
 ```
 
-
+## Separación de datos
 ```{r datos, include=FALSE}
 
 SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
@@ -49,8 +49,6 @@ sactnetusd<- window(actnetusd,start=inicio_train)
 sactnetusd_train<- window(actnetusd,start=inicio_train, end=fin_train)
 sactnetusd_test<- window(actnetusd,start=inicio_test)
 ```
-
-
 
 # Pruebas de No Linealidad Colones
 
@@ -151,32 +149,8 @@ thr.test(actnetusd,p=3,d=3)
 
 ### TAR
 
-```{r ,eval=F}
-
-set.seed(777)
-# m orden
-pm <- 1:4
-
-mod.list.tar<-list()
-
-
-
-for(j in pm){
-  for(i in pm){
-    for(l in pm){
-      mod<-TSA::tar(sactnetcrc_train,p1=j,p2=i,d=l,print=TRUE)  
-      
-      mod.list.tar[[paste(j,l,i,sep="-")]]<-mod$AIC
-      print(paste(j,l,i,sep="-"))    
-    }
-  }
-}
-
-AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
-  arrange(`1`)
-
-knitr::kable(head(AICTar,20))
-
+```{r, include=F}
+rm(list=ls()[!ls() %in% c('actnetcrc','actnetusd','actnet',"fin_train","inicio_test","inicio_train","sactnetcrc","sactnetcrc_test","sactnetcrc_train","sactnetusd","sactnetusd_test","sactnetusd_train")])
 ```
 
 ```{r ,eval=F}
@@ -211,10 +185,10 @@ for(l in pm){
   }
 }
 
-AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
-  arrange(`1`)
-
-knitr::kable(head(AICTar,20))
+# AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
+#   arrange(`1`)
+# 
+# knitr::kable(head(AICTar,20))
 
 AICTarBest<-bind_rows(AIC.best.list,.id = "Ordene-delay")%>%
   arrange(`1`)
@@ -240,9 +214,15 @@ mod.tar1$qr2$coefficients
 mod.tar2$qr2$coefficients
 mod.tar3$qr2$coefficients
 
-mod.tar1$AIC
-mod.tar2$AIC
-mod.tar3$AIC
+cbind(
+Modelo=c("p1=2,p2=3,d=1",
+         "p1=3,p2=1,d=1",
+         "p1=3,p2=2,d=1"),
+AIC=c(mod.tar1$AIC,
+mod.tar2$AIC,
+mod.tar3$AIC))%>%
+  knitr::kable()
+
 
 #tsdiag(mod.tar1)
 tsdiag(mod.tar2)
@@ -278,7 +258,8 @@ autoplot(sactnetcrc_test)+
   autolayer(prontar1)+
   autolayer(prontar2)+
   autolayer(prontar3)+
-  theme_bw()
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
 ```
 
 ### SETAR
@@ -362,7 +343,7 @@ Setar4$allTh%>%
   head(5)
 ```
 
-```{r}
+```{r Modelos Seleccionados}
 
 modeloas1 <-
   setar(
@@ -452,121 +433,61 @@ autoplot(sactnetcrc_train)+
   autolayer(fit4)+
   theme_bw()
 
-Metrics::rmse(sactnetcrc_test, pronsetar1)
-Metrics::rmse(sactnetcrc_test, pronsetar2)
-Metrics::rmse(sactnetcrc_test, pronsetar3)
-Metrics::rmse(sactnetcrc_test, pronsetar4)
+data.frame(
+Modelo= c(
+  "1) m = 3,mL = 3,mH = 1, d=1",
+  "2) m = 3,mL = 2,mH = 3, d=2",
+  "3) m = 3,mL = 3,mH = 2, d=1",
+  "4) m = 3,mL = 1,mH = 2, d=2"
+),
+RMSE=c(
+  Metrics::rmse(sactnetcrc_test, pronsetar1),
+  Metrics::rmse(sactnetcrc_test, pronsetar2),
+  Metrics::rmse(sactnetcrc_test, pronsetar3),
+  Metrics::rmse(sactnetcrc_test, pronsetar4)))%>%
+  arrange(RMSE)%>%
+  knitr::kable()
 
 autoplot(sactnetcrc_test)+
-  autolayer(exp(pronsetar1))+
-  autolayer(exp(pronsetar2))+
-  autolayer(exp(pronsetar3))+
-  autolayer(exp(pronsetar4))+
-  theme_bw()
-```
-
-
-### LSTAR
-
-```{r , eval=F}
-
-modlstat1<-lstar(sactnetcrc_train, m=1, include = c("const", "trend","none", "both"))     
-modlstat2<-lstar(sactnetcrc_train, m=2, include = c("const", "trend","none", "both"))  
-modlstat3<-lstar(sactnetcrc_train, m=3, include = c("const", "trend","none", "both"))  
-
-plot(modlstat1)
-plot(modlstat2)
-plot(modlstat3)
-
-summary(modlstat1)
-summary(modlstat2)
-summary(modlstat3)
-
-pronlsetar1<- predict(modlstat1, n.ahead = 7)
-pronlsetar2<- predict(modlstat2, n.ahead = 7)
-pronlsetar3<- predict(modlstat3, n.ahead = 7)
-
-Metrics::rmse(sactnetcrc_test, pronlsetar1)
-Metrics::rmse(sactnetcrc_test, pronlsetar2)
-Metrics::rmse(sactnetcrc_test, pronlsetar3)
-
-fit1<-ts(modlstat1$fitted.values,start =c(2011,1),frequency = 12)
-fit2<-ts(modlstat2$fitted.values,start =c(2011,1),frequency = 12)
-fit3<-ts(modlstat3$fitted.values,start =c(2011,1),frequency = 12)
-
-
-autoplot(sactnetcrc_train)+
-  autolayer(fit1)+
-  autolayer(fit2)+
-  autolayer(fit3)+
-  theme_bw()
-
-
-autoplot(sactnetcrc_test)+
-  autolayer(pronlsetar1)+
-  autolayer(pronlsetar2)+
-  autolayer(pronlsetar3)+
-  theme_bw()
-
+  autolayer(pronsetar1)+
+  autolayer(pronsetar2)+
+  autolayer(pronsetar3)+
+  autolayer(pronsetar4)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
 ```
 
 ### Metricas Generales
 
 ```{r , eval=F}
-Metrics::rmse(sactnetcrc_test,(prontar3))
-Metrics::rmse(sactnetcrc_test, (pronsetar2))
-Metrics::rmse(sactnetcrc_test, (pronlsetar3))
+Metrics::rmse(sactnetcrc_test,(prontar2))
+Metrics::rmse(sactnetcrc_test, (pronsetar4))
 
 autoplot(sactnetcrc_test)+
-  autolayer((prontar3))+
-  autolayer((pronsetar2))+
-  autolayer((pronlsetar3))+
-  theme_bw()
+  autolayer(prontar2)+
+  autolayer(pronsetar4)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
 ```
 
 ## Dolares
 
 ### TAR
 
-```{r ,eval=F}
-
-set.seed(777)
-# m orden
-pm <- 1:4
-
-mod.list.tar<-list()
-
-
-
-for(j in pm){
-  for(i in pm){
-    for(l in pm){
-      mod<-TSA::tar(sactnetusd_train,p1=j,p2=i,d=l,print=TRUE)  
-      
-      mod.list.tar[[paste(j,l,i,sep="-")]]<-mod$AIC
-      print(paste(j,l,i,sep="-"))    
-    }
-  }
-}
-
-AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
-  arrange(`1`)
-
-knitr::kable(head(AICTar,20))
-
+```{r, include=F}
+rm(list=ls()[!ls() %in% c('actnetcrc','actnetusd','actnet',"fin_train","inicio_test","inicio_train","sactnetcrc","sactnetcrc_test","sactnetcrc_train","sactnetusd","sactnetusd_test","sactnetusd_train","pronsetar4","modeloas4","prontar2","mod.tar2")])
 ```
 
 ```{r ,eval=F}
-
 # m orden
-pm <- 1:3
+pm <- 1:4
 
 mod.list.tar<-list()
 AIC.best.list<-list()
 
 AICM = NULL
 model.best <- list(d=0, p1=0, p2=0)
-AIC.best = 2888
+AIC.best = 10000
 
 for(l in pm){
   for(j in pm){
@@ -574,12 +495,12 @@ for(l in pm){
       set.seed(777)
       model.tar.s = tar(sactnetusd_train,p1=j,p2=i,d=l)
       mod.list.tar[[paste(j,i,l,sep="-")]]<-model.tar.s$AIC
-      #print(paste(j,i,l,sep="-"))    
+      print(paste("Modelo:",j,i,l,sep="-"))    
       
       if (model.tar.s$AIC < AIC.best) {
 		    AIC.best = model.tar.s$AIC
 		    AIC.best.list[[paste(j,i,l,sep="-")]]<-AIC.best
-		    #print(AIC.best)
+		    #print("Modelo:",j,i,l,"AIC",AIC.best)
 		    model.best$d = l
 		    model.best$p1 = model.tar.s$p1
 		    model.best$p2 = model.tar.s$p2 
@@ -588,73 +509,88 @@ for(l in pm){
   }
 }
 
-AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
-  arrange(`1`)
-
-knitr::kable(head(AICTar,20))
+# AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
+#   arrange(`1`)
+# 
+# knitr::kable(head(AICTar,20))
 
 AICTarBest<-bind_rows(AIC.best.list,.id = "Ordene-delay")%>%
   arrange(`1`)
 
 knitr::kable(head(AICTarBest,20))
-
 ```
 
 ```{r}
-mod.tar1<-TSA::tar(sactnetusd_train,p1=2,p2=3,d=1)  
-mod.tar2<-TSA::tar(sactnetusd_train,p1=3,p2=1,d=1)  
-mod.tar3<-TSA::tar(sactnetusd_train,p1=3,p2=2,d=1)  
+mod.tar1.usd<-TSA::tar(sactnetusd_train,p1=3,p2=4,d=1)  
+mod.tar2.usd<-TSA::tar(sactnetusd_train,p1=1,p2=2,d=1)  
+mod.tar3.usd<-TSA::tar(sactnetusd_train,p1=1,p2=3,d=1)  
 
-mod.tar1$thd
-mod.tar2$thd
-mod.tar3$thd
+mod.tar1.usd$thd
+mod.tar2.usd$thd
+mod.tar3.usd$thd
 
-mod.tar1$qr1$coefficients
-mod.tar2$qr1$coefficients
-mod.tar3$qr1$coefficients
+mod.tar1.usd$qr1$coefficients
+mod.tar2.usd$qr1$coefficients
+mod.tar3.usd$qr1$coefficients
 
-mod.tar1$qr2$coefficients
-mod.tar2$qr2$coefficients
-mod.tar3$qr2$coefficients
+mod.tar1.usd$qr2$coefficients
+mod.tar2.usd$qr2$coefficients
+mod.tar3.usd$qr2$coefficients
 
-mod.tar1$AIC
-mod.tar2$AIC
-mod.tar3$AIC
+data.frame(
+Modelo=c("p1=3,p2=4,d=1",
+         "p1=1,p2=2,d=1",
+         "p1=1,p2=3,d=1"),
+AIC=c(mod.tar1.usd$AIC,
+mod.tar2.usd$AIC,
+mod.tar3.usd$AIC))%>%
+  arrange(AIC)%>%
+  knitr::kable()
 
-#tsdiag(mod.tar1)
-tsdiag(mod.tar2)
-#tsdiag(mod.tar3)
+
+tsdiag(mod.tar1.usd)
+tsdiag(mod.tar2.usd)
+tsdiag(mod.tar3.usd)
 
 
-checkresiduals(ts(mod.tar1$residuals,start=c(2011,1),frequency = 12))
-checkresiduals(ts(mod.tar2$residuals,start=c(2011,1),frequency = 12))
-checkresiduals(ts(mod.tar3$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar1.usd$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar2.usd$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar3.usd$residuals,start=c(2011,1),frequency = 12))
 ```
 
 
 ```{r}
-prontar1<- ts(as.vector(predict(mod.tar1,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
-prontar2<- ts(as.vector(predict(mod.tar2,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
-prontar3<- ts(as.vector(predict(mod.tar3,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar1.usd<- ts(as.vector(predict(mod.tar1.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar2.usd<- ts(as.vector(predict(mod.tar2.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar3.usd<- ts(as.vector(predict(mod.tar3.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
 
-fit1<-ts(as.vector(mod.tar1$y)-as.vector(mod.tar1$residuals),start =c(2011,1),frequency = 12)
-fit2<-ts(sactnetusd_train-mod.tar2$residuals,start =c(2011,1),frequency = 12)
-fit3<-ts(sactnetusd_train-mod.tar3$residuals,start =c(2011,1),frequency = 12)
+fit1.usd<-ts(as.vector(mod.tar1.usd$y)-as.vector(mod.tar1.usd$residuals),start =c(2011,1),frequency = 12)
+fit2.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar2.usd$residuals,start =c(2011,1),frequency = 12)
+fit3.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar3.usd$residuals,start =c(2011,1),frequency = 12)
 
 autoplot(sactnetusd_train)+
-  autolayer(fit1)+
-  autolayer(fit2)+
-  autolayer(fit3)+
+  autolayer(fit1.usd)+
+  autolayer(fit2.usd)+
+  autolayer(fit3.usd)+
   theme_bw()
 
-Metrics::rmse(sactnetcrc_test, prontar1)
-Metrics::rmse(sactnetcrc_test, prontar2)
-Metrics::rmse(sactnetcrc_test, prontar3)
+data.frame(
+Modelo=c("p1=3,p2=4,d=1",
+         "p1=1,p2=2,d=1",
+         "p1=1,p2=3,d=1"),
+RMSE=c(
+  Metrics::rmse(sactnetusd_test, prontar1.usd),
+  Metrics::rmse(sactnetusd_test, prontar2.usd),
+  Metrics::rmse(sactnetusd_test, prontar3.usd)))%>%
+  arrange(RMSE)%>%
+  knitr::kable()
 
-autoplot(sactnetcrc_test)+
-  autolayer(prontar1)+
-  autolayer(prontar2)+
-  autolayer(prontar3)+
+
+
+autoplot(sactnetusd_test)+
+  autolayer(prontar1.usd)+
+  autolayer(prontar2.usd)+
+  autolayer(prontar3.usd)+
   theme_bw()
 ```
 
@@ -663,7 +599,6 @@ autoplot(sactnetcrc_test)+
 Thus the threshold delay, the number of lags in each regime and the threshold value are computed.
 
 ```{r, eval=F}
-
 Setar1 <-
   selectSETAR(
     sactnetusd_train, 
@@ -829,74 +764,43 @@ autoplot(sactnetusd_train)+
   autolayer(fit4)+
   theme_bw()
 
-Metrics::rmse(sactnetcrc_test, pronsetar1)
-Metrics::rmse(sactnetcrc_test, pronsetar2)
-Metrics::rmse(sactnetcrc_test, pronsetar3)
-Metrics::rmse(sactnetcrc_test, pronsetar4)
+data.frame(
+Modelo= c(
+  "1) m = 3,mL = 3,mH = 1, d=1",
+  "2) m = 3,mL = 2,mH = 3, d=2",
+  "3) m = 3,mL = 3,mH = 2, d=1",
+  "4) m = 3,mL = 1,mH = 2, d=2"
+),
+RMSE=c(
+  Metrics::rmse(sactnetusd_test, pronsetar1),
+  Metrics::rmse(sactnetusd_test, pronsetar2),
+  Metrics::rmse(sactnetusd_test, pronsetar3),
+  Metrics::rmse(sactnetusd_test, pronsetar4)))%>%
+  arrange(RMSE)%>%
+  knitr::kable()
 
-autoplot(sactnetcrc_test)+
-  autolayer(exp(pronsetar1))+
-  autolayer(exp(pronsetar2))+
-  autolayer(exp(pronsetar3))+
-  autolayer(exp(pronsetar4))+
-  theme_bw()
+autoplot(sactnetusd_test)+
+  autolayer(pronsetar1)+
+  autolayer(pronsetar2)+
+  autolayer(pronsetar3)+
+  autolayer(pronsetar4)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
 ```
 
 
-### LSTAR
 
-```{r , eval=F}
-
-modlstat1<-lstar(sactnetusd_train, m=1, include = c("const", "trend","none", "both"))     
-modlstat2<-lstar(sactnetusd_train, m=2, include = c("const", "trend","none", "both"))  
-modlstat3<-lstar(sactnetusd_train, m=3, include = c("const", "trend","none", "both"))  
-
-plot(modlstat1)
-plot(modlstat2)
-plot(modlstat3)
-
-summary(modlstat1)
-summary(modlstat2)
-summary(modlstat3)
-
-pronlsetar1<- predict(modlstat1, n.ahead = 7)
-pronlsetar2<- predict(modlstat2, n.ahead = 7)
-pronlsetar3<- predict(modlstat3, n.ahead = 7)
-
-Metrics::rmse(sactnetcrc_test, pronlsetar1)
-Metrics::rmse(sactnetcrc_test, pronlsetar2)
-Metrics::rmse(sactnetcrc_test, pronlsetar3)
-
-fit1<-ts(modlstat1$fitted.values,start =c(2011,1),frequency = 12)
-fit2<-ts(modlstat2$fitted.values,start =c(2011,1),frequency = 12)
-fit3<-ts(modlstat3$fitted.values,start =c(2011,1),frequency = 12)
-
-
-autoplot(sactnetusd_train)+
-  autolayer(fit1)+
-  autolayer(fit2)+
-  autolayer(fit3)+
-  theme_bw()
-
-
-autoplot(sactnetcrc_test)+
-  autolayer(pronlsetar1)+
-  autolayer(pronlsetar2)+
-  autolayer(pronlsetar3)+
-  theme_bw()
-
-```
 
 ### Metricas Generales
 
 ```{r , eval=F}
-Metrics::rmse(sactnetcrc_test,(prontar3))
-Metrics::rmse(sactnetcrc_test, (pronsetar2))
-Metrics::rmse(sactnetcrc_test, (pronlsetar3))
+Metrics::rmse(sactnetusd_test,(prontar2))
+Metrics::rmse(sactnetusd_test, (pronsetar3))
 
-autoplot(sactnetcrc_test)+
-  autolayer((prontar3))+
-  autolayer((pronsetar2))+
-  autolayer((pronlsetar3))+
-  theme_bw()
+
+autoplot(sactnetusd_test)+
+  autolayer(prontar2)+
+  autolayer(pronsetar3)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
 ```
