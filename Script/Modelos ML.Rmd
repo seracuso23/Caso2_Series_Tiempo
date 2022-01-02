@@ -1,0 +1,462 @@
+---
+title: "Modelos De Machine Learning"
+author: "Sergio Cubero"
+date: "1/2/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(xgboost)
+library(tidymodels)
+library(modeltime)
+library(tidymodels)
+library(tidyverse)
+library(timetk)
+library(lubridate)
+library(readxl)
+```
+
+```{r}
+SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
+  janitor::clean_names()%>%
+  mutate(ActivoNeto=paste0(activo_neto,"-01"))%>%
+  rename('ActNetCRC'=crc,
+         'ActNetUSD'=usd)
+
+```
+
+## Split: Train & Test
+
+### Colones
+```{r colones recopile datos y divídalos en conjuntos de prueba y entrenamiento.}
+
+colones <- SeriesDatos%>%
+  select(date=ActivoNeto,value=ActNetCRC)%>%
+  mutate(date=as.Date(date))
+
+colones %>%
+  plot_time_series(date, value, .interactive = T)
+
+# Split Data 80/20
+splits <- initial_time_split(colones, prop = 0.975)
+
+train.crc<-training(splits)
+test.crc<-testing(splits)
+```
+
+
+
+### Dolares
+```{r dolares recopile datos y divídalos en conjuntos de prueba y entrenamiento.}
+
+dolares <- SeriesDatos%>%
+  select(date=ActivoNeto,value=ActNetUSD)%>%
+  mutate(date=as.Date(date))
+
+dolares %>%
+  plot_time_series(date, value, .interactive = T)
+
+# Split Data 80/20
+splits <- initial_time_split(dolares, prop = 0.975)
+
+train.usd<-training(splits)
+test.usd<-testing(splits)
+```
+
+
+
+
+```{r  colones cree y ajuste varios modelos}
+
+#Model 2: arima_boost ----
+model_fit_arima_boosted <- arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost") %>%
+    fit(value ~ date + as.numeric(date) + factor(month(date, label = TRUE), ordered = F),
+        data = training(splits))
+
+### prophet 
+model_fit_prophet_lin <- prophet_reg(growth='linear') %>%
+    set_engine(engine = "prophet") %>%
+    fit(value ~ date, data = training(splits))
+
+model_fit_prophet_flat <- prophet_reg(growth='flat') %>%
+    set_engine(engine = "prophet") %>%
+    fit(value ~ date, data = training(splits))
+
+### XGBOOST
+rec_obj <- recipe(value ~ ., training(splits)) %>%
+  step_timeseries_signature(date) %>%
+  step_rm(date) %>%
+  step_zv(all_predictors()) %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)
+
+wflw_xgb <- workflow() %>%
+  add_model(
+    boost_tree() %>% set_engine("xgboost")
+  ) %>%
+  add_recipe(rec_obj) %>%
+  fit(training(splits))
+```
+
+```{r colones agregue modelos ajustados a una tabla de modelos}
+models_tbl <- modeltime_table(
+    model_fit_arima_boosted,
+    model_fit_prophet_lin,
+    model_fit_prophet_flat,
+    wflw_xgb
+)
+
+models_tbl
+```
+
+```{r colones calibre el modelo a un conjunto de prueba.}
+calibration_tbl <- models_tbl %>%
+    modeltime_calibrate(new_data = testing(splits))
+
+calibration_tbl
+
+```
+
+```{r colones Evaluación de la precisión y el pronóstico del conjunto de pruebas}
+calibration_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = colones
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25, # For mobile screens
+      .interactive      = interactive
+    )
+
+calibration_tbl %>%
+    modeltime_accuracy() %>%
+    table_modeltime_accuracy(
+        .interactive = interactive
+    )
+
+
+```
+
+```{r colones reajustar al conjunto de datos completo y prever el avance}
+refit_tbl <- calibration_tbl %>%
+    modeltime_refit(data = colones)
+
+refit_tbl %>%
+    modeltime_forecast(h = "7 months", actual_data = colones) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25, # For mobile screens
+      .interactive      = interactive
+    )
+
+```
+```{r}
+# Validacion Cruzada para ver el desempeño de los modelos en diferentes muestras
+
+resamples_tscv <- time_series_cv(
+    data        = m750,
+    assess      = "5 months",
+    initial     = "8 years",
+    skip        = "1 years",
+    slice_limit = 10
+)
+
+resamples_tscv
+
+# colones %>%
+#   plot_time_series(date, value, .interactive = T)
+
+resamples_tscv %>%
+    tk_time_series_cv_plan() %>%
+    plot_time_series_cv_plan(date, value, .facet_ncol = 2, .interactive = T)
+
+resamples_fitted <- models_tbl %>%
+    modeltime_fit_resamples(
+        resamples = resamples_tscv,
+        control   = control_resamples(verbose = FALSE)
+    )
+
+resamples_fitted %>%
+    plot_modeltime_resamples(
+      .point_size  = 3, 
+      .point_alpha = 0.8,
+      .interactive = FALSE
+    )
+
+resamples_fitted %>%
+    modeltime_resample_accuracy(summary_fns = mean) %>%
+    table_modeltime_accuracy(.interactive = FALSE)
+
+```
+
+
+
+```{r}
+library(tidymodels)
+library(modeltime)
+library(modeltime.ensemble)
+
+
+models_tbl %>% 
+    modeltime_accuracy(testing(splits)) %>%
+    table_modeltime_accuracy(.interactive = FALSE)
+
+models_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = colones
+    ) %>%
+    plot_modeltime_forecast(.interactive = FALSE)
+
+
+# Simple Average Ensemble
+ensemble_fit_avg <- models_tbl %>%
+    ensemble_average(type = "mean")
+ensemble_fit_avg
+
+# Simple Median Ensemble
+ensemble_fit_med <- models_tbl %>%
+    ensemble_average("median")
+
+# Higher Loading on Better Models (Test RMSE)
+ensemble_fit_wt <- models_tbl %>%
+    ensemble_weighted(loadings = c(2, 4, 6, 1))
+
+ensemble_models_tbl <- modeltime_table(
+    ensemble_fit_avg,
+    ensemble_fit_med,
+    ensemble_fit_wt
+)
+ensemble_models_tbl
+
+ensemble_models_tbl %>%
+    modeltime_accuracy(testing(splits)) %>%
+    table_modeltime_accuracy(.interactive = T)
+
+ensemble_models_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = colones
+    ) %>%
+    plot_modeltime_forecast(.interactive = T)
+
+
+```
+```{r}
+library(tidymodels)
+library(modeltime)
+library(modeltime.ensemble)
+library(tidyverse)
+library(timetk)
+
+# Step 1: Make resample predictions for submodels
+resamples_tscv <- training(splits) %>%
+    time_series_cv(
+    assess = "3 months",
+    initial = "12 months",
+    skip = "3 months",
+    slice_limit = 5
+  )
+
+submodel_predictions <- models_tbl %>%
+    modeltime_fit_resamples(
+        resamples = resamples_tscv,
+        control   = control_resamples(verbose = TRUE)
+    )
+
+# Step 2: Metalearner ----
+n_grid <- 15 
+# * No Metalearner Tuning
+ensemble_fit_lm <- submodel_predictions %>%
+    ensemble_model_spec(
+        model_spec = linear_reg() %>% set_engine("lm"),
+        control    = control_grid(verbose = TRUE)
+    )
+
+ensemble_fit_lm
+
+# * No Metalearner Tuning
+ensemble_fit_xgboost <- submodel_predictions %>%
+    ensemble_model_spec(
+        model_spec = boost_tree(mtry = tune(),
+  trees =  tune(),
+  min_n =  tune(),
+  tree_depth =  tune(),
+  learn_rate =tune()) %>%
+            set_engine("xgboost"),
+        grid       = n_grid,
+        control    = control_grid(verbose = TRUE)
+    )
+
+ensemble_fit_xgboost
+
+#* With Metalearner Tuning ----
+ensemble_fit_glmnet <- submodel_predictions %>%
+    ensemble_model_spec(
+        model_spec = linear_reg(
+            penalty = tune(),
+            mixture = tune()
+        ) %>%
+            set_engine("glmnet"),
+        grid       = n_grid,
+        control    = control_grid(verbose = TRUE)
+    )
+
+ensemble_fit_glmnet
+
+ensemble_fit_lm_tune<- submodel_predictions %>%
+    ensemble_model_spec(
+        model_spec = linear_reg(
+            penalty = tune(),
+            mixture = tune()
+        ) %>%
+            set_engine("lm"),
+        grid       = n_grid,
+        control    = control_grid(verbose = TRUE)
+    )
+
+ensemble_fit_lm_tune
+
+ ensemble_models_all_tbl <- modeltime_table(
+    ensemble_fit_lm,
+    ensemble_fit_lm_tune,
+  ensemble_fit_glmnet,
+  ensemble_fit_xgboost,
+  ensemble_fit_avg,
+  ensemble_fit_med,
+#ensemble_fit_wt,
+  model_fit_arima_boosted,
+    model_fit_prophet_lin,
+    model_fit_prophet_flat,
+    wflw_xgb
+)
+
+calibration_tbl_ap <- ensemble_models_all_tbl%>%
+  modeltime_calibrate(testing(splits),quiet=FALSE)
+
+# ---- ACCURACY ----
+# indicadores de precisión
+calibration_tbl_ap %>%
+    modeltime_accuracy(testing(splits)) %>%
+    table_modeltime_accuracy(.interactive = T)
+
+# ---- FORECAST ----
+
+
+ensemble_models_all_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = colones
+    ) %>%
+    plot_modeltime_forecast(.interactive = T)
+
+
+# pronóstico de los 5 meses: agosto-dic 2021.
+api.sm.col.pre<-calibration_tbl_ap %>%
+  modeltime_forecast(
+    h = "5 months",
+    new_data    = testing(splits),
+    actual_data = colones
+  )
+
+api.sm.col.pre
+```
+
+
+```{r colones Calibracio XGBOOST, eval=F}
+
+# parallel::detectCores(logical = FALSE)
+parallel_start(2)
+
+splits <- time_series_split(
+  colones, 
+  assess     = "6 months", 
+  cumulative = TRUE
+)
+
+splits %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(date, value, .interactive = F)
+
+
+recipe_spec_1 <- recipe(value ~ ., training(splits)) %>%
+  step_timeseries_signature(date) %>%
+  step_rm(date) %>%
+  step_normalize(date_index.num) %>%
+  step_zv(all_predictors()) %>%
+  step_dummy(all_nominal_predictors(), one_hot = TRUE)
+
+
+model_tbl <- tibble(
+  learn_rate = c(0.001, 0.010, 0.100, 0.350, 0.500, 0.650)
+) %>%
+  create_model_grid(
+    f_model_spec = boost_tree,
+    engine_name  = "xgboost",
+    mode         = "regression"
+  )
+
+model_list <- model_tbl$.models
+model_list
+
+model_wfset <- workflow_set(
+  preproc = list(
+    recipe_spec_1
+  ),
+  models = model_list, 
+  cross = TRUE
+)
+
+model_wfset
+
+
+control_fit_workflowset(
+  verbose   = TRUE,
+  allow_par = TRUE
+)
+
+model_parallel_tbl <- model_wfset %>%
+  modeltime_fit_workflowset(
+    data    = training(splits),
+    control = control_fit_workflowset(
+      verbose   = TRUE,
+      allow_par = TRUE
+    )
+  )
+
+model_parallel_tbl
+
+model_sequential_tbl <- model_wfset %>%
+  modeltime_fit_workflowset(
+    data    = training(splits),
+    control = control_fit_workflowset(
+      verbose   = TRUE,
+      allow_par = FALSE
+    )
+  )
+
+model_parallel_tbl %>%
+  modeltime_calibrate(testing(splits)) %>%
+  modeltime_accuracy() %>%
+  table_modeltime_accuracy(.interactive = FALSE)
+
+model_parallel_tbl %>%
+  modeltime_forecast(
+    new_data    = testing(splits),
+    actual_data = dataset_tbl,
+    keep_data   = TRUE
+  ) %>%
+  group_by(id) %>%
+  plot_modeltime_forecast(
+    .facet_ncol  = 3,
+    .interactive = T
+  )
+
+parallel_stop()
+```

@@ -266,7 +266,7 @@ autoplot(sactnetcrc_test)+
 
 Thus the threshold delay, the number of lags in each regime and the threshold value are computed.
 
-```{r, eval=F}
+```{r, eval=T}
 
 Setar1 <-
   selectSETAR(
@@ -459,7 +459,7 @@ autoplot(sactnetcrc_test)+
 
 ### Metricas Generales
 
-```{r , eval=F}
+```{r , eval=T}
 Metrics::rmse(sactnetcrc_test,(prontar2))
 Metrics::rmse(sactnetcrc_test, (pronsetar4))
 
@@ -598,39 +598,39 @@ autoplot(sactnetusd_test)+
 
 Thus the threshold delay, the number of lags in each regime and the threshold value are computed.
 
-```{r, eval=F}
-Setar1 <-
+```{r, eval=t}
+Setar1.usd <-
   selectSETAR(
     sactnetusd_train, 
     include = c("const", "trend","none", "both"),
-    m = 3,
-    thDelay = seq(1, 2, by = 1),
-    nthresh = 2,
+    m = 4,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
     criterion = "AIC",
     type = "level",
     plot = T,
     trace = T
   )
 
-Setar2 <-
+Setar2.usd <-
   selectSETAR(
     sactnetusd_train,
-    m = 3,
+    m = 4,
     d=2,
-    thDelay = seq(1, 2, by = 1),
-    nthresh = 2,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
     criterion = "AIC",
     type = "level",
     plot = T,
     trace = T
   )
 
-Setar3 <-
+Setar3.usd <-
   selectSETAR(
     sactnetusd_train,
-    m = 3,
-    thDelay = seq(0, 2, by = 1),
-    nthresh = 1,
+    m = 4,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
     d = 1,
     criterion = "AIC",
     type = "level",
@@ -638,12 +638,12 @@ Setar3 <-
     trace = T
   )
 
-Setar4 <-
+Setar4.usd <-
   selectSETAR(
     sactnetusd_train,
-    m = 3,
-    thDelay = seq(0, 2, by = 1),
-    nthresh = 1,
+    m = 4,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
     d = 2,
     criterion = "AIC",
     type = "level",
@@ -652,23 +652,23 @@ Setar4 <-
   )
 
 
-Setar1$allTh%>%
+Setar1.usd$allTh%>%
   as.data.frame()%>%
   arrange(AIC,thDelay,mL,mH)%>%
   head(5)
 
 
-Setar2$allTh%>%
+Setar2.usd$allTh%>%
   as.data.frame()%>%
   arrange(AIC,thDelay,mL,mH)%>%
   head(5)
 
-Setar3$allTh%>%
+Setar3.usd$allTh%>%
   as.data.frame()%>%
   arrange(AIC,thDelay,mL,mH)%>%
   head(5)
 
-Setar4$allTh%>%
+Setar4.usd$allTh%>%
   as.data.frame()%>%
   arrange(AIC,thDelay,mL,mH)%>%
   head(5)
@@ -676,55 +676,52 @@ Setar4$allTh%>%
 
 ```{r}
 
-modeloas1 <-
+modeloas1.usd <-
   setar(
     sactnetusd_train,
-    m = 3,
+    mL = 1,
+    mH = 3,
+    d=1,
+    nthresh = 1,
+    thDelay = 2,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas1.usd) #residuals variance = 0.005525,  AIC = -632, MAPE = 0.4352%
+# plot(modeloas1)
+checkresiduals(ts(modeloas1.usd$residuals,start=c(2011,1),frequency = 12))
+
+modeloas2.usd <-
+  setar(
+    sactnetusd_train,
     mL = 3,
+    mH = 1,
+    d=2,
+    nthresh = 1,
+    thDelay = 1,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas2.usd) # residuals variance = 0.005857,  AIC = -635, MAPE = 0.4584%
+# plot(modeloas2)
+checkresiduals(ts(modeloas2.usd$residuals,start=c(2011,1),frequency = 12))
+
+modeloas3.usd <-
+  setar(
+    sactnetusd_train,
+    mL = 1,
     mH = 1,
     d=1,
     nthresh = 1,
-    thDelay = 2,
+    thDelay = 1,
     type = "level"
   )
 ## Raiz Unitaria
-summary(modeloas1) #residuals variance = 0.005525,  AIC = -632, MAPE = 0.4352%
-# plot(modeloas1)
-checkresiduals(ts(modeloas1$residuals,start=c(2011,1),frequency = 12))
-
-modeloas2 <-
-  setar(
-    sactnetusd_train,
-    m = 3,
-    mL = 2,
-    mH = 3,
-    d=2,
-    nthresh = 1,
-    thDelay = 2,
-    type = "level"
-  )
-## Raiz Unitaria
-summary(modeloas2) # residuals variance = 0.005857,  AIC = -635, MAPE = 0.4584%
-# plot(modeloas2)
-checkresiduals(ts(modeloas2$residuals,start=c(2011,1),frequency = 12))
-
-modeloas3 <-
-  setar(
-    sactnetusd_train,
-    m = 3,
-    mL = 3,
-    mH = 2,
-    d=1,
-    nthresh = 1,
-    thDelay = 0,
-    type = "level"
-  )
-## Raiz Unitaria
-summary(modeloas3) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
+summary(modeloas3.usd) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
 # plot(modeloas3)
-checkresiduals(ts(modeloas3$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(modeloas3.usd$residuals,start=c(2011,1),frequency = 12))
 
-modeloas4 <-
+modeloas4.usd <-
   setar(
     sactnetusd_train,
     m = 3,
@@ -735,33 +732,33 @@ modeloas4 <-
     thDelay = 0,
     type = "level"
   )
-summary(modeloas4) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
+summary(modeloas4.usd) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
 # plot(modeloas4)
-checkresiduals(ts(modeloas4$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(modeloas4.usd$residuals,start=c(2011,1),frequency = 12))
 
 
-AIC(modeloas1)
-AIC(modeloas2)
-AIC(modeloas3)
-AIC(modeloas4)
+AIC(modeloas1.usd)
+AIC(modeloas2.usd)
+AIC(modeloas3.usd)
+AIC(modeloas4.usd)
 ```
 
 ```{r}
-pronsetar1<- predict(modeloas1, n.ahead = 7)
-pronsetar2<- predict(modeloas2, n.ahead = 7)
-pronsetar3<- predict(modeloas3, n.ahead = 7)
-pronsetar4<- predict(modeloas4, n.ahead = 7)
+pronsetar1.usd<- predict(modeloas1.usd, n.ahead = 7)
+pronsetar2.usd<- predict(modeloas2.usd, n.ahead = 7)
+pronsetar3.usd<- predict(modeloas3.usd, n.ahead = 7)
+pronsetar4.usd<- predict(modeloas4.usd, n.ahead = 7)
 
-fit1<-ts(modeloas1$fitted.values,start =c(2011,1),frequency = 12)
-fit2<-ts(modeloas2$fitted.values,start =c(2011,1),frequency = 12)
-fit3<-ts(modeloas3$fitted.values,start =c(2011,1),frequency = 12)
-fit4<-ts(modeloas4$fitted.values,start =c(2011,1),frequency = 12)
+fit1.usd<-ts(modeloas1.usd$fitted.values,start =c(2011,1),frequency = 12)
+fit2.usd<-ts(modeloas2.usd$fitted.values,start =c(2011,1),frequency = 12)
+fit3.usd<-ts(modeloas3.usd$fitted.values,start =c(2011,1),frequency = 12)
+fit4.usd<-ts(modeloas4.usd$fitted.values,start =c(2011,1),frequency = 12)
 
 autoplot(sactnetusd_train)+
-  autolayer(fit1)+
-  autolayer(fit2)+
-  autolayer(fit3)+
-  autolayer(fit4)+
+  autolayer(fit1.usd)+
+  autolayer(fit2.usd)+
+  autolayer(fit3.usd)+
+  autolayer(fit4.usd)+
   theme_bw()
 
 data.frame(
@@ -772,20 +769,19 @@ Modelo= c(
   "4) m = 3,mL = 1,mH = 2, d=2"
 ),
 RMSE=c(
-  Metrics::rmse(sactnetusd_test, pronsetar1),
-  Metrics::rmse(sactnetusd_test, pronsetar2),
-  Metrics::rmse(sactnetusd_test, pronsetar3),
-  Metrics::rmse(sactnetusd_test, pronsetar4)))%>%
+  Metrics::rmse(sactnetusd_test, pronsetar1.usd),
+  Metrics::rmse(sactnetusd_test, pronsetar2.usd),
+  Metrics::rmse(sactnetusd_test, pronsetar3.usd),
+  Metrics::rmse(sactnetusd_test, pronsetar4.usd)))%>%
   arrange(RMSE)%>%
   knitr::kable()
 
 autoplot(sactnetusd_test)+
-  autolayer(pronsetar1)+
-  autolayer(pronsetar2)+
-  autolayer(pronsetar3)+
-  autolayer(pronsetar4)+
-  theme_bw()+
-  scale_y_continuous(limits = c(500000,1400000))
+  autolayer(pronsetar1.usd)+
+  autolayer(pronsetar2.usd)+
+  autolayer(pronsetar3.usd)+
+  autolayer(pronsetar4.usd)+
+  theme_bw()
 ```
 
 
@@ -793,14 +789,13 @@ autoplot(sactnetusd_test)+
 
 ### Metricas Generales
 
-```{r , eval=F}
-Metrics::rmse(sactnetusd_test,(prontar2))
-Metrics::rmse(sactnetusd_test, (pronsetar3))
+```{r , eval=T}
+Metrics::rmse(sactnetusd_test,prontar1.usd)
+Metrics::rmse(sactnetusd_test, pronsetar4.usd)
 
 
 autoplot(sactnetusd_test)+
-  autolayer(prontar2)+
-  autolayer(pronsetar3)+
-  theme_bw()+
-  scale_y_continuous(limits = c(500000,1400000))
+  autolayer(prontar1.usd)+
+  autolayer(pronsetar4.usd)+
+  theme_bw()
 ```
