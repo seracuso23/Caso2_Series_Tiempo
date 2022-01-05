@@ -1,0 +1,319 @@
+---
+title: "Modeltime: Demo"
+author: "Sergio Cubero"
+date: "1/4/2022"
+output: html_document
+---
+
+Ejemplo tomado: 
+
+```{r ,echo=FALSE}
+vembedr::embed_youtube("6RjYIOCnRMk")
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r paquetes}
+# Machine Learning
+library(tidymodels)
+library(modeltime)
+library(modeltime.ensemble)
+library(modeltime.resample)
+
+# Time Series
+library(timetk)
+
+# Core
+library(tidyverse)
+```
+
+## DATA
+
+```{r}
+walmart_sales_weekly
+
+walmart_sales_weekly%>%
+  group_by(id)%>%
+  plot_time_series(Date,Weekly_Sales,.facet_ncol = 3, .interactive = F)
+```
+
+## DATA PREPARATION
+
+```{r}
+FORECAST_HORIZON <- 52
+```
+
+### Full = Training + Forecast Dataset
+
+```{r}
+full_data_tbl <- walmart_sales_weekly%>%
+  select(id,Date,Weekly_Sales)%>%
+  
+  ## Apply Group-Wise Time Series Manipulations
+  group_by(id)%>%
+  future_frame(
+    .date_var = Date,
+    .length_out = FORECAST_HORIZON,
+    .bind_data = T
+  )%>%
+  ungroup()%>%
+  
+  # Consolidate IDs
+  mutate(id=fct_drop(id))
+
+```
+
+### Training Data
+
+```{r}
+data_prepared_tbl <- full_data_tbl%>%
+  filter(!is.na(Weekly_Sales))
+  
+data_prepared_tbl%>%
+  group_by(id)%>%
+  tk_summary_diagnostics()
+```
+
+### Future Data Forecast
+```{r}
+future_tbl <- full_data_tbl%>%
+  filter(is.na(Weekly_Sales))
+```
+
+## SPLITTING
+
+```{r}
+splits <- data_prepared_tbl%>%
+  arrange(id,Date)%>%
+  time_series_split(
+    data_var=Date,
+    assess = FORECAST_HORIZON,
+    cumulative = T
+  )
+
+splits
+
+# Testing Count
+84/7
+
+# Training Count
+917/7
+```
+
+## PREPROCESOR
+
+```{r}
+recipe_spec_1 <- recipe(Weekly_Sales~., training(splits))%>%
+  step_timeseries_signature(Date)%>%
+  ## Elimina las columnas o atributos que no aportan
+  step_rm(matches("(.iso$)|(.xts)|(day)|(hour)|(minute)|(second)|(am.pm)")) %>%
+  step_normalize(Date_index.num,Date_year)%>%
+  step_mutate(Date_week = factor(Date_week,ordered = T))%>%
+  step_dummy(all_nominal(),one_hot = T)
+
+recipe_spec_1 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_2 <- recipe_spec_1%>%
+  update_role(Date,new_role = "ID")
+
+recipe_spec_2 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_1 %>% prep() %>% summary()
+recipe_spec_2 %>% prep() %>% summary()
+```
+
+## MODELS
+
+### prophet 
+
+```{r}
+wflw_fit_prophet <- workflow()%>%
+  add_model(
+    prophet_reg() %>% set_engine("prophet")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+### XGBOOST
+
+```{r}
+wflw_fit_xgboost <- workflow()%>%
+  add_model(
+    boost_tree() %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+### Random Forest
+
+```{r}
+wflw_fit_rf <- workflow()%>%
+  add_model(
+    rand_forest() %>% set_engine("ranger")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+### SVM
+
+```{r}
+wflw_fit_svm <- workflow()%>%
+  add_model(
+    svm_rbf() %>% set_engine("kernlab")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+### prophet_boost
+
+```{r}
+wflw_fit_prophet_boost <- workflow()%>%
+  add_model(
+    prophet_boost(
+      seasonality_yearly = F,
+      seasonality_weekly = F,
+      seasonality_daily =  F,
+    ) %>% 
+      set_engine("prophet_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+## MODELTIME WORKFLOW
+
+### modeltime table
+
+```{r}
+submodels_tbl <- modeltime_table(
+  wflw_fit_prophet,
+  wflw_fit_prophet_boost,
+  wflw_fit_xgboost,
+  wflw_fit_rf,
+  wflw_fit_svm
+)
+
+submodels_tbl
+```
+
+### calibrate Testing Data
+
+```{r}
+submodels_calibrated_tbl <- submodels_tbl %>%
+  modeltime_calibrate(testing(splits))
+
+submodels_calibrated_tbl
+```
+
+### Measure Test Accuracy
+
+```{r}
+submodels_calibrated_tbl%>% modeltime_accuracy()
+```
+
+### Visualize test forecast
+
+```{r}
+submodels_calibrated_tbl %>%
+  modeltime_forecast(
+    new_data = testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  group_by(id)%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+### Refit on full training dataset
+
+```{r}
+submodels_refit_tbl <- submodels_calibrated_tbl %>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+### Visualize Submodel Forecast
+
+```{r}
+submodels_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  group_by(id) %>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+## ENSEMBLE
+
+## Make ensemble
+
+```{r}
+ensemble_fit_mean <- submodels_tbl %>%
+  filter(!.model_id %in% c(1))%>%
+  ensemble_average(type="mean")
+
+# Modeltime table
+ensemble_tbl <- modeltime_table(
+  ensemble_fit_mean
+)
+
+ensemble_tbl
+```
+
+### Ensemble test Accuracy
+
+```{r}
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_accuracy(testing(splits))
+```
+
+### Ensemble Test Forecast
+
+```{r}
+ensemble_tbl%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  group_by(id) %>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+### Refit Ensemble
+
+```{r}
+ensemble_refit_tbl <- ensemble_tbl%>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+### Visualize Ensemble Forecast
+
+```{r}
+ensemble_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  group_by(id) %>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+```
