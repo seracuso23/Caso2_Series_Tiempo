@@ -30,11 +30,14 @@ library(timetk)
 
 # Core
 library(tidyverse)
+
+# Load data
+library(readxl)
 ```
 
-## DATA
 
-```{r}
+
+```{r , include=F}
 SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
   janitor::clean_names()%>%
   mutate(ActivoNeto=paste0(activo_neto,"-01"))%>%
@@ -54,21 +57,22 @@ dolares <- SeriesDatos%>%
          )
 ```
 
+# MODELO DE MACHINE LEARNING {.tabset}
+
+## COLONES
 
 ```{r}
-colones
-
 colones%>%
   plot_time_series(Date,value,.facet_ncol = 3, .interactive = F)
 ```
 
-## DATA PREPARATION
+### DATA PREPARATION
 
 ```{r}
 FORECAST_HORIZON <- 5
 ```
 
-### Full = Training + Forecast Dataset
+#### Full = Training + Forecast Dataset
 
 ```{r}
 full_data_tbl <- colones%>%
@@ -81,7 +85,7 @@ full_data_tbl <- colones%>%
 
 ```
 
-### Training Data
+#### Training Data
 
 ```{r}
 data_prepared_tbl <- full_data_tbl%>%
@@ -91,13 +95,14 @@ data_prepared_tbl%>%
   tk_summary_diagnostics()
 ```
 
-### Future Data Forecast
+#### Future Data Forecast
+
 ```{r}
 future_tbl <- full_data_tbl%>%
   filter(is.na(value))
 ```
 
-## SPLITTING
+### SPLITTING
 
 ```{r}
 splits <- data_prepared_tbl%>%
@@ -112,7 +117,7 @@ splits
 
 ```
 
-## PREPROCESOR
+### PREPROCESOR
 
 ```{r}
 recipe_spec_1 <- recipe(value~., training(splits))%>%
@@ -134,9 +139,9 @@ recipe_spec_1 %>% prep() %>% summary()
 recipe_spec_2 %>% prep() %>% summary()
 ```
 
-## MODELS
+### MODELS
 
-### autoarima xgboost 
+#### autoarima xgboost 
 
 ```{r}
 wflw_fit_autoarima_boost <- workflow()%>%
@@ -151,7 +156,7 @@ wflw_fit_autoarima_boost <- workflow()%>%
   fit(training(splits))
 ```
 
-### prophet 
+#### prophet 
 
 ```{r}
 wflw_fit_prophet <- workflow()%>%
@@ -162,7 +167,7 @@ wflw_fit_prophet <- workflow()%>%
   fit(training(splits))
 ```
 
-### XGBOOST
+#### XGBOOST
 
 ```{r}
 wflw_fit_xgboost_0_015 <- workflow()%>%
@@ -188,7 +193,7 @@ wflw_fit_xgboost_0_3 <- workflow()%>%
 
 ```
 
-### Random Forest
+#### Random Forest
 
 ```{r}
 wflw_fit_rf_1000 <- workflow()%>%
@@ -222,7 +227,7 @@ wflw_fit_rf_200 <- workflow()%>%
   fit(training(splits))
 ```
 
-### SVM
+#### SVM
 
 ```{r}
 wflw_fit_svm <- workflow()%>%
@@ -233,7 +238,7 @@ wflw_fit_svm <- workflow()%>%
   fit(training(splits))
 ```
 
-### prophet_boost
+#### prophet_boost
 
 ```{r}
 wflw_fit_prophet_boost <- workflow()%>%
@@ -249,9 +254,9 @@ wflw_fit_prophet_boost <- workflow()%>%
   fit(training(splits))
 ```
 
-## MODELTIME WORKFLOW
+### MODELTIME WORKFLOW
 
-### modeltime table
+#### modeltime table
 
 ```{r}
 submodels_tbl <- modeltime_table(
@@ -270,7 +275,7 @@ submodels_tbl <- modeltime_table(
 submodels_tbl
 ```
 
-### calibrate Testing Data
+#### calibrate Testing Data
 
 ```{r}
 submodels_calibrated_tbl <- submodels_tbl %>%
@@ -279,7 +284,7 @@ submodels_calibrated_tbl <- submodels_tbl %>%
 submodels_calibrated_tbl
 ```
 
-### Measure Test Accuracy
+#### Measure Test Accuracy
 
 ```{r}
 submodels_calibrated_tbl%>% 
@@ -287,7 +292,7 @@ submodels_calibrated_tbl%>%
   arrange(rmse)
 ```
 
-### Visualize test forecast
+#### Visualize test forecast
 
 ```{r}
 submodels_calibrated_tbl %>%
@@ -301,14 +306,14 @@ submodels_calibrated_tbl %>%
   )
 ```
 
-### Refit on full training dataset
+#### Refit on full training dataset
 
 ```{r}
 submodels_refit_tbl <- submodels_calibrated_tbl %>%
   modeltime_refit(data_prepared_tbl)
 ```
 
-### Visualize Submodel Forecast
+#### Visualize Submodel Forecast
 
 ```{r}
 submodels_refit_tbl%>%
@@ -322,7 +327,7 @@ submodels_refit_tbl%>%
   )
 ```
 
-### Validación cruzada
+#### Validación cruzada
 
 https://cran.r-project.org/web/packages/modeltime.resample/vignettes/getting-started.html
 
@@ -346,7 +351,7 @@ resamples_tscv %>%
                              .interactive = T)
 ```
 
-#### Generate Resample Predictions
+##### Generate Resample Predictions
 
 ```{r}
 resamples_fitted <- submodels_tbl %>%
@@ -358,7 +363,7 @@ resamples_fitted <- submodels_tbl %>%
 resamples_fitted
 ```
 
-#### Evaluate the Results
+##### Evaluate the Results
 
 ```{r}
 resamples_fitted %>%
@@ -373,9 +378,9 @@ resamples_fitted %>%
     table_modeltime_accuracy(.interactive = T)
 ```
 
-## ENSEMBLE
+### ENSEMBLE
 
-## Ensamble Media y Meta-Learner
+#### Ensamble Media y Meta-Learner
 
 ```{r}
 ensemble_fit_mean <- submodels_tbl %>%
@@ -414,7 +419,7 @@ ensemble_tbl<- modeltime_table(
 ```
 
 
-### Ensemble test Accuracy
+#### Ensemble test Accuracy
 
 ```{r}
 ensemble_tbl%>%
@@ -424,9 +429,7 @@ ensemble_tbl%>%
   knitr::kable()
 ```
 
-
-
-### Ensemble Test Forecast
+#### Ensemble Test Forecast
 
 ```{r}
 ensemble_tbl%>%
@@ -458,14 +461,442 @@ ensemble_tbl_all_model<-ensemble_tbl%>%
   combine_modeltime_tables(submodels_tbl)
 ```
 
-### Refit Ensemble
+#### Refit Ensemble
 
 ```{r}
 ensemble_refit_tbl <- ensemble_tbl%>%
   modeltime_refit(data_prepared_tbl)
 ```
 
-### Visualize Ensemble Forecast
+#### Visualize Ensemble Forecast
+
+```{r}
+ensemble_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+```
+
+
+
+## DOLARES
+
+### DATA
+
+```{r}
+dolares%>%
+  plot_time_series(Date,value,.facet_ncol = 3, .interactive = F)
+```
+
+### DATA PREPARATION
+
+```{r}
+FORECAST_HORIZON <- 5
+```
+
+#### Full = Training + Forecast Dataset
+
+```{r}
+full_data_tbl <- dolares%>%
+  select(Date,value)%>%
+  future_frame(
+    .date_var = Date,
+    .length_out = FORECAST_HORIZON,
+    .bind_data = T
+  )
+
+```
+
+#### Training Data
+
+```{r}
+data_prepared_tbl <- full_data_tbl%>%
+  filter(!is.na(value))
+  
+data_prepared_tbl%>%
+  tk_summary_diagnostics()
+```
+
+#### Future Data Forecast
+
+```{r}
+future_tbl <- full_data_tbl%>%
+  filter(is.na(value))
+```
+
+### SPLITTING
+
+```{r}
+splits <- data_prepared_tbl%>%
+  arrange(Date)%>%
+  time_series_split(
+    data_var=Date,
+    assess = FORECAST_HORIZON,
+    cumulative = T
+  )
+
+splits
+
+```
+
+### PREPROCESOR
+
+```{r}
+recipe_spec_1 <- recipe(value~., training(splits))%>%
+  step_timeseries_signature(Date)%>%
+  ## Elimina las columnas o atributos que no aportan
+  step_rm(matches("(.iso$)|(.xts)|(day)|(hour)|(minute)|(second)|(am.pm)|(week)")) %>%
+  step_normalize(Date_index.num,Date_year)%>%
+  step_mutate(Date_month = factor(Date_month,ordered = T))%>%
+  step_dummy(all_nominal(),one_hot = T)
+
+recipe_spec_1 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_2 <- recipe_spec_1%>%
+  update_role(Date,new_role = "ID")
+
+recipe_spec_2 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_1 %>% prep() %>% summary()
+recipe_spec_2 %>% prep() %>% summary()
+```
+
+### MODELS
+
+#### autoarima xgboost 
+
+```{r}
+wflw_fit_autoarima_boost <- workflow()%>%
+  add_model(
+    arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+#### prophet 
+
+```{r}
+wflw_fit_prophet <- workflow()%>%
+  add_model(
+    prophet_reg() %>% set_engine("prophet")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+#### XGBOOST
+
+```{r}
+wflw_fit_xgboost_0_015 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.15) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_xgboost_0_1 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.1) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_xgboost_0_3 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.3) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+```
+
+#### Random Forest
+
+```{r}
+wflw_fit_rf_1000 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 1000
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_rf_500 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 500
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_rf_200 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 200
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+#### SVM
+
+```{r}
+wflw_fit_svm <- workflow()%>%
+  add_model(
+    svm_rbf() %>% set_engine("kernlab")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+#### prophet_boost
+
+```{r}
+wflw_fit_prophet_boost <- workflow()%>%
+  add_model(
+    prophet_boost(
+      seasonality_yearly = F,
+      seasonality_weekly = F,
+      seasonality_daily =  F,
+    ) %>% 
+      set_engine("prophet_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+### MODELTIME WORKFLOW
+
+#### modeltime table
+
+```{r}
+submodels_tbl <- modeltime_table(
+  wflw_fit_autoarima_boost,
+  #wflw_fit_prophet, #1
+  wflw_fit_prophet_boost, #2
+  #wflw_fit_xgboost_0_015, #3
+  #wflw_fit_xgboost_0_1, #4
+  wflw_fit_xgboost_0_3, #5
+  #wflw_fit_rf_1000, #6
+  wflw_fit_rf_500 #, #7
+  #wflw_fit_rf_200, #8
+  #wflw_fit_svm #9
+)
+
+submodels_tbl
+```
+
+#### calibrate Testing Data
+
+```{r}
+submodels_calibrated_tbl <- submodels_tbl %>%
+  modeltime_calibrate(testing(splits))
+
+submodels_calibrated_tbl
+```
+
+#### Measure Test Accuracy
+
+```{r}
+submodels_calibrated_tbl%>% 
+  modeltime_accuracy()%>%
+  arrange(rmse)
+```
+
+#### Visualize test forecast
+
+```{r}
+submodels_calibrated_tbl %>%
+  modeltime_forecast(
+    new_data = testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+#### Refit on full training dataset
+
+```{r}
+submodels_refit_tbl <- submodels_calibrated_tbl %>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+#### Visualize Submodel Forecast
+
+```{r}
+submodels_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+#### Validación cruzada
+
+https://cran.r-project.org/web/packages/modeltime.resample/vignettes/getting-started.html
+
+```{r}
+resamples_tscv <- time_series_cv(
+    data        = data_prepared_tbl,
+    date_var    = Date,
+    assess      = FORECAST_HORIZON,
+    initial     = "36 month",
+    skip        = FORECAST_HORIZON,
+    slice_limit = 5
+)
+
+resamples_tscv
+
+resamples_tscv %>%
+    tk_time_series_cv_plan() %>%
+    plot_time_series_cv_plan(Date, 
+                             value, 
+                             .facet_ncol = 2,
+                             .interactive = T)
+```
+
+##### Generate Resample Predictions
+
+```{r}
+resamples_fitted <- submodels_tbl %>%
+    modeltime_fit_resamples(
+        resamples = resamples_tscv,
+        control   = control_resamples(verbose = FALSE)
+    )
+
+resamples_fitted
+```
+
+##### Evaluate the Results
+
+```{r}
+resamples_fitted %>%
+    plot_modeltime_resamples(
+      .point_size  = 3, 
+      .point_alpha = 0.8,
+      .interactive = T
+    )
+
+resamples_fitted %>%
+    modeltime_resample_accuracy(summary_fns = mean) %>%
+    table_modeltime_accuracy(.interactive = T)
+```
+
+### ENSEMBLE
+
+#### Ensamble Media y Meta-Learner
+
+```{r}
+ensemble_fit_mean <- submodels_tbl %>%
+  #filter(!.model_id %in% c(1))%>%
+  ensemble_average(type="mean")
+
+
+ensemble_fit_lm <- resamples_fitted %>%
+  ensemble_model_spec(
+    model_spec = linear_reg(
+      penalty = tune(),
+      mixture = tune()
+    ) %>%
+      set_engine("glmnet"),
+    grid = 2,
+    control = control_grid(verbose = TRUE)
+  )
+
+ensemble_fit_xg<- resamples_fitted %>%
+  ensemble_model_spec(
+    model_spec = boost_tree(
+      mtry=tune(),
+      trees=tune(),
+      learn_rate = tune()
+    ) %>% set_engine("xgboost"),
+    control = control_grid(verbose = TRUE)
+  )
+```
+
+```{r}
+ensemble_tbl<- modeltime_table(
+  ensemble_fit_mean,
+  ensemble_fit_lm,
+  ensemble_fit_xg
+)
+```
+
+
+#### Ensemble test Accuracy
+
+```{r}
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_accuracy(testing(splits))%>%
+  arrange(rmse,mae,mape,mase)%>%
+  knitr::kable()
+```
+
+#### Ensemble Test Forecast
+
+```{r}
+ensemble_tbl%>%
+  modeltime_calibrate(testing(splits))%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T,
+    conf_by_id = T,
+    conf_interval = 0.95
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_calibrate(testing(splits))%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+ensemble_tbl_all_model<-ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)
+```
+
+#### Refit Ensemble
+
+```{r}
+ensemble_refit_tbl <- ensemble_tbl%>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+#### Visualize Ensemble Forecast
 
 ```{r}
 ensemble_refit_tbl%>%
