@@ -1,0 +1,2405 @@
+---
+title: "Caso 2: Impacto de la Crisis Sanitaria por COVID-19 sobre los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero"
+author: "Sergio Cubero"
+date: "1/6/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 6
+    fig_width: 8
+    fig_height: 4
+    fig_caption: yes
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+options(scipen = 999)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Core
+library(tidyverse)
+library(grid)
+library(gridExtra)
+
+# Load data
+library(readxl)
+
+# Time Series
+library(timetk)
+library(forecast)
+library(TSA)
+library(NTS)
+library(MSwM)
+library(tsDyn)
+library(fNonlinear)
+library(dlm)
+library(astsa)
+library(seasonal)
+library(tseries)
+library(astsa)
+library(tsoutliers)
+library(urca)
+
+# Machine Learning
+library(tidymodels)
+library(modeltime)
+library(modeltime.ensemble)
+library(modeltime.resample)
+
+library(timetk)
+```
+
+```{r}
+getPerformance = function(pred, val) {
+    res = pred - val
+    MAE = sum(abs(res))/length(val)
+    RSS = sum(res^2)
+    MSE = RSS/length(val)
+    RMSE = sqrt(MSE)
+    perf = data.frame(MAE, RSS, MSE, RMSE)
+    return(perf)
+}
+```
+
+# 1.Introducción
+# 2.Metodología
+## 2.1. Datos
+## 2.2. Modelo Lineal
+## 2.3. Modelo No Lineal
+## 2.4. Modelo Machine Learning
+### 2.4.1. Validación Cruzada
+## 2.5. Métricas de Rendimiento
+# 3. Resultados
+
+El presente apartado esta dividido en dos secciones las cuales muestran los resultados obtenidos que buscan respaldar el objetivo planteado. La primera sección se compara y selecciona el mejor modelo de pronostico de serie de tiempo según el tipo de modelo: lineales, no lineales y de minería de datos, para posteriormente, realizar un ensamble con los mejores tres métodos. La segunda sección presenta una prueba de tensión en el cual se plantearán diferentes escenarios para estimar el potencial impacto de una caída abrupta de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones y dólares en Costa Rica para diciembre 2021.
+
+## 3.1. Análisis Exploratorio
+En la figura \@ref(fig:evolucionserie) se muestran los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones y dolares para febrero-2001 a julio-2021 y de la cual se genera el análisis para identificar las siguientes características: tendencias o ciclos, existencia de estabilidad en las observaciones, variancia de las observaciones (constante o variable en el tiempo), existencia de observaciones inusuales y de puntos extremos, cambios en la estructura de la serie, entre otras.
+
+```{r serie datos}
+
+SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
+  janitor::clean_names()%>%
+  mutate(ActivoNeto=paste0(activo_neto,"-01"))%>%
+  rename('ActNetCRC'=crc,
+         'ActNetUSD'=usd)
+
+actnetcrc<- ts(SeriesDatos[,2],start =c(2001,2),end=c(2021,7), frequency = 12)
+actnetusd<- ts(SeriesDatos[,3],start =c(2001,2),end=c(2021,7), frequency = 12)
+actnet <- cbind(actnetcrc,actnetusd) 
+
+fitcrc<-actnetcrc %>% 
+  seas() 
+
+fitusd<- actnetusd %>% 
+  seas() 
+
+```
+
+```{r evolucionserie, fig.cap="Costa Rica:Evolución de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+pseries<-autoplot(actnet,facets=TRUE) +
+  xlab("Mes") +
+  ylab("Millones")+
+  theme_bw()
+
+ptendseriecr<-autoplot(actnetcrc, series="Data") +
+  autolayer(trendcycle(fitcrc), series="Tendencia") +
+  #autolayer(seasadj(fitcrc), series="Ajustada Estacionalmente") +
+  xlab("Mes") + ylab("Millones") +
+  scale_colour_manual(values=c("grey70","red","royalblue4"),
+             breaks=c("Data","Ajustada Estacionalmente","Tendencia"))+
+  theme_bw()+
+  ggtitle("Colones")+
+   geom_vline(xintercept = 2015 + (06 - 1) / 12,linetype = "dashed", colour ='gray' )+
+   geom_vline(xintercept = 2016 + (11 - 1) / 12,linetype = "dashed", colour ='gray' )+
+  scale_y_continuous(breaks = seq(0,1200000,200000))
+
+ptendserieusd<-autoplot(actnetusd, series="Data") +
+  autolayer(trendcycle(fitusd), series="Tendencia") +
+  #autolayer(seasadj(fitusd), series="Ajustada Estacionalmente") +
+  xlab("Mes") + ylab("Saldos") +
+  ggtitle("Dolares") +
+  scale_colour_manual(values=c("grey70","red","royalblue4"),
+             breaks=c("Data","Ajustada Estacionalmente","Tendencia"))+
+  theme_bw()+
+   geom_vline(xintercept = 2015 + (06 - 1) / 12,linetype = "dashed", colour ='gray' )+
+   geom_vline(xintercept = 2016 + (12 - 1) / 12,linetype = "dashed", colour ='gray' )+
+  scale_y_continuous(breaks = seq(0,2000,250)) 
+
+grid.arrange(ptendseriecr, ptendserieusd, ncol = 1)
+```
+
+```{r outliers, cache=TRUE}
+
+#https://www.sepg.pap.hacienda.gob.es/sitios/sepg/es-ES/Presupuestos/DocumentacionEstadisticas/Documentacion/Documents/DOCUMENTOS%20DE%20TRABAJO/D95006.pdf
+
+otlier_crc<- tso(y = actnetcrc,types=c("SLS","AO","LS","TC","IO"))
+plot(otlier_crc)
+# otlier_usd<- tso(y = actnetusd,types=c("SLS","AO","LS","TC","IO"))
+# otlier_usd
+
+```
+
+A partir del análisis de la serie se identificaron las siguientes característica:
+
+-   Para ambas series del activo neto , colones y dolares, se observa una tendencia creciente desde febrero 2001, así como un aumento de la variabilidad conforme aumenta los meses.
+
+-   Para el periodo de mayo 2015 a octubre 2016 (lineas punteadas gris) hay un cambio de nivel (Valor extremo LS[^4]) en el volumen mensual del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero tanto en colones como en dolares, sin embargo, es inverso en ambas series, lo cual sugiere que posiblemente los participantes trasladaron sus inversiones de dolares a colones, esto se explica por:
+
+    -   La adopción del régimen de tipo de cambio de flotación administrada por parte del Banco Central de Costa Rica (BCCR) y el incremento en el superávit de divisas del sector privado incidió en la apreciación del colón (disminución del tipo de cambio) [@bccr5].
+
+    -   La reducción de la tasa de interés de política monetaria por parte del BCCR en 300 puntos base en el 2015, con el objetivo de estimular la economía, promoviendo el crecimiento en el crédito nacional y para reducir el costo de la deuda para el gobierno [@mv1; @mv2].
+
+    -   En el último trimestre del 2015, la industria tuvo una contracción de la liquidez en dolares, explicado por la salida de los participantes hacia el mercado internacional [@mv2].
+
+-   Para el activo neto en colones se observa que en abril 2020 el activo neto en colones creció en 19.5 por ciento respecto al mismo periodo del año pasado, este comportamiento creciente y acelerado se mantuvo hasta diciembre de ese mismo año. Lo cual coincide con el efecto de la crisis sanitaria por COVID-19 que inicio en Costa Rica en marzo 2020, esta fecha es identificada como un valor extremo de cambio temporal [\^4]. Esta situación sanitaria provocó un aumento de la incertidumbre en la economía mundial incidiendo en que los agentes económicos buscaran refugiarse en activos líquidos [@bccr1]. Un comportamiento similar ocurre para el activo neto en dolares.
+
+-   Respecto a la estacionalidad de las series, se observa en la figura \@ref(fig:estacionalidad) que para el caso de colones los saldos del activo neto tienden a ser mayores en enero y octubre, y presentar valores relativamente bajos al finalizar el año noviembre y diciembre, esto es de esperar debido a la época navideña y que diciembre comúnmente se labora 3 de las 4 semana del mes. Para el caso de dolares se observa que los meses con mayores saldos del activo neto se dan de mayo a agosto, y al igual que el caso de colones, se observa que los dos últimos meses del año los mismos se reduce.
+
+```{r estacionalidad,fig.cap="Costa Rica:Indice Estacional de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+pestacioncr <- fitcrc %>% 
+  seasonal() %>% 
+  ggsubseriesplot() + 
+  ylab("Estacionalidad")+
+  theme_bw()+
+  ggtitle("Colones")
+
+pestacionusd <- fitusd %>% 
+  seasonal() %>% 
+  ggsubseriesplot() + 
+  ylab("Estacionalidad")+
+  theme_bw()+
+  ggtitle("Dolares")
+
+grid.arrange(pestacioncr, pestacionusd, nrow = 2,ncol=1)
+
+
+```
+
+Por otro lado, respecto al componente irregular para la serie en colones (ver en el \@ref(anexos), la figura \@ref(fig:descomposicionplotanexo)) ,se comporta de hasta el año 2012 de forma aditiva, en otras, palabras la variancia de la serie no fluctua con el nivel de la serie, sin embargo, a partir de 2012 hacia delante se observa que la variación aumenta con el nivel de la serie, por lo cual se podría argumentar que la serie tiene un comportamiento mixto (aditivo y multiplicativo). En contra parte, para la serie en dolares no se observa una variación similar en todo el periodo y que no varía con respecto al nivel de la serie.
+
+```{r descomposicion}
+fitcrc_add<-actnetcrc %>% 
+  decompose(type = "additive")
+
+fitcrc_multi<-actnetcrc %>% 
+  decompose(type = "multiplicative")
+
+fitusd_add<- actnetusd  %>% 
+  decompose(type = "additive")
+
+fitusd_multi<- actnetusd %>% 
+  decompose(type = "multiplicative")
+
+pdescompcrcadd <- fitcrc_add%>%
+  autoplot() + 
+  xlab("Mes")+
+  ggtitle("Aditiva: Colones") +
+  theme_bw()
+
+pdescompcrcmult<-fitcrc_multi%>%
+  autoplot() + xlab("Mes") +
+  ggtitle("Multiplicativa: Colones")+
+  theme_bw()
+
+pdescompusdadd <- fitusd_add%>%
+  autoplot() + 
+  xlab("Mes")+
+  ggtitle("Aditiva: Dolares") +
+  theme_bw()
+
+pdescompusdmult<-fitusd_multi%>%
+  autoplot() + xlab("Mes") +
+  ggtitle("Multiplicativa: Dolares")+
+  theme_bw()
+
+descompo<-grid.arrange(pdescompcrcadd,pdescompcrcmult, pdescompusdadd,pdescompusdmult, nrow = 2,ncol=2)
+
+```
+
+Para confirmar cual modelo (aditivo o multiplicativo) se ajusta mejor a cada serie se procedió a evaluar si el componente irregular identificando se ajusta a una distribución normal, para lo cual se realizaron la pruebas de hipótesis de normalidad *Shapiro-Wilk* y *Jarque-Bera,* así como una inspección gráfica por medio de Cuantil- Cuantil (qqplot). En la figura \@ref(fig:irregularcrc) se puede identificar que para el caso de la serie en colones, el mejor modelo es el multiplicativo mientras que para la serie en dolares es el aditivo.
+
+```{r irregularcrc, eval=T, fig.cap="Costa Rica: QQPlot de los residuos de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares por tipo de descomposición, febrero-2001 a julio-2021",fig.align="center"}
+
+Aleatorio_Desc<-cbind(
+  Aleatorio_crc_add=fitcrc_add$random,
+  Aleatorio_crc_multi=fitcrc_multi$random,
+  Aleatorio_usd_add=fitusd_add$random,
+  Aleatorio_usd_multi=fitusd_multi$random)%>%
+  as.data.frame()
+
+jb_res_crc_add<-jarque.bera.test(Aleatorio_Desc$Aleatorio_crc_add[!is.na(Aleatorio_Desc$Aleatorio_crc_add)]) # Cumple
+jb_res_crc_mult<-jarque.bera.test(Aleatorio_Desc$Aleatorio_crc_multi[!is.na(Aleatorio_Desc$Aleatorio_crc_multi)]) # Cumple
+jb_res_usd_add<-jarque.bera.test(Aleatorio_Desc$Aleatorio_usd_add[!is.na(Aleatorio_Desc$Aleatorio_usd_add)]) # Cumple
+jb_res_usd_multi<-jarque.bera.test(Aleatorio_Desc$Aleatorio_usd_multi[!is.na(Aleatorio_Desc$Aleatorio_usd_multi)]) # Cumple
+
+sw_res_crc_add<-shapiro.test(Aleatorio_Desc$Aleatorio_crc_add[!is.na(Aleatorio_Desc$Aleatorio_crc_add)]) # Cumple
+sw_res_crc_mult<-shapiro.test(Aleatorio_Desc$Aleatorio_crc_multi[!is.na(Aleatorio_Desc$Aleatorio_crc_multi)]) # Cumple
+sw_res_usd_add<-shapiro.test(Aleatorio_Desc$Aleatorio_usd_add[!is.na(Aleatorio_Desc$Aleatorio_usd_add)]) # Cumple
+sw_res_usd_multi<-shapiro.test(Aleatorio_Desc$Aleatorio_usd_multi[!is.na(Aleatorio_Desc$Aleatorio_usd_multi)]) # Cumple
+
+## Gráficosde qqplot
+p1<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_crc_add))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Aditiva - Colones") + 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value):Shapiro-Wilk:",round(sw_res_crc_add$statistic,3),",",round(sw_res_crc_add$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_crc_add$statistic,3),",",round(jb_res_crc_add$p.value,4)))+
+  theme_bw()
+
+p2<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_crc_multi))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Multiplicativa - Colones")+ 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value):Shapiro Wilk:",round(sw_res_crc_mult$statistic,3),",",round(sw_res_crc_mult$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_crc_mult$statistic,3),",",round(jb_res_crc_mult$p.value,4)))+
+  theme_bw()
+
+p3<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_usd_add))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Aditiva - Dolares")+ 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value): Shapiro Wilk:",round(sw_res_usd_add$statistic,3),",",round(sw_res_usd_add$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_usd_add$statistic,3),",",round(jb_res_usd_add$p.value,4)))+
+  theme_bw()
+
+p4<-ggplot(Aleatorio_Desc, aes(sample = Aleatorio_usd_multi))+
+  stat_qq() + 
+  stat_qq_line()+
+  ggtitle("Multiplicativa - Dolares")+ 
+  labs(subtitle = paste("Prubas de Normalidad (Estadístico,P-Value): Shapiro Wilk:",round(sw_res_usd_multi$statistic,3),",",round(sw_res_usd_multi$p.value,4), "y",
+                        "Jarque-Bera",round(jb_res_usd_multi$statistic,3),",",round(jb_res_usd_multi$p.value,4)))+
+  theme_bw()
+
+grid.arrange(p1,p2,p3,p4,nrow=2, ncol = 2)
+```
+
+```{r series estacionariedad}
+MaxLag2<-length(actnetcrc)/4
+
+## Media Constante
+### Niveles
+# H0: No es estacionario
+# H1: Es estacionario
+adf_org_crc<-adf.test(actnetcrc,alternative="stationary") # Media no constante
+adf_org_usd<-adf.test(actnetusd,alternative="stationary") # Media no constante
+
+## Realiza la prueba de raíz unitaria de Zivot \ & Andrews, que permite una ruptura en un punto desconocido en la intersección, la tendencia lineal o en ambas.
+
+## Esta prueba se basa en la estimación recursiva de una regresión de prueba. El estadístico de prueba se define como el estadístico t mínimo del coeficiente de la variable endógena rezagada.
+
+## Recuérdese que en las pruebas a evaluar la hipótesis nula es presencia de raíz unitaria, mientras que la alternativa es estacionariedad.
+
+## La prueba es muy sensible, realice pruebas y siempre daba resultados o pvalues diferente para una distribucion normal 1 , 0
+
+za_org_crc<-ur.za(window(actnetcrc,start=c(2001,2),end=c(2020,2)), model="both")
+summary(za_org_crc)
+plot(za_org_crc)
+
+time(actnetcrc)[171]
+
+za_org_usd<-ur.za(window(actnetusd,start=c(2001,2),end=c(2020,3)), model="both")
+summary(za_org_usd)
+plot(za_org_usd)
+time(actnetusd)[155]
+```
+
+En relación a la estacionariedad[^5] de las series, ambas no cumplen con dicha condición ya que presentan tendencia creciente y por ende no tienen media constante en el tiempo. Para confirmar esto realiza la prueba de hipótesis de Dickey-Fuller aumentada donde lo hipótesis nula es que la serie tiene raíz unitaria (proceso no estacionario), en ambos casos no se rechaza la hipótesis nula (Serie Colones: estadístico: `r adf_org_crc$statistic` y valor-p: `r adf_org_crc$p.value` y la Serie Dolares: estadístico: `r adf_org_usd$statistic` y valor-p: `r adf_org_usd$p.value`), y se puede observar que la Función de Autocorrelación Simple Muestral (ACF) decae lentamente a 0 (Figuras \@ref(fig:acfpacfseriescrc) y \@ref(fig:acfpacfseriesusd)), esto sugiere que para realizar estacionaria las series se podrían transformar a logaritmo y diferenciar.
+
+```{r acfpacfseriescrc, fig.cap="Función de autocorrelación y autocorrelación parcial estimadas de la serie de cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en colones, febrero 2001 a diciembre-2020"}
+
+autocorrecrc<-acf2(actnetcrc,max.lag = MaxLag2)
+#actnetcrc%>% ggtsdisplay(main="Colones")
+
+
+```
+
+```{r acfpacfseriesusd, fig.cap="Función de autocorrelación y autocorrelación parcial estimadas de la serie de cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares, febrero 2001 a diciembre-2020"}
+
+autocorreusd<-acf2(actnetcrc,max.lag = MaxLag2)
+# actnetusd%>% ggtsdisplay(main="Dolares")
+
+```
+
+```{r}
+crclineal<-fNonlinear::tnnTest(actnetusd, lag = 1, title = NULL, description = NULL)
+usdlineal<-fNonlinear::tnnTest(actnetcrc, lag = 1, title = NULL, description = NULL)
+
+```
+
+```{r}
+# Kennan tests for nonlineary
+# 
+# La hipótesis nula de que la serie de tiempo sigue algún proceso de AR.
+Keenan.test(log(actnetcrc))
+Keenan.test(log(actnetcrc), order=1)
+Keenan.test(log(actnetcrc), order=2)
+Keenan.test(log(actnetcrc), order=3)
+
+Keenan.test(log(actnetusd))
+Keenan.test(log(actnetusd), order=1)
+Keenan.test(log(actnetusd), order=2)
+Keenan.test(log(actnetusd), order=3)
+```
+
+Lo que respecta a la linealidad de las series, se observa que las mismas cumplen con la linealidad en la media lo que es confirmado con la prueba de hipótesis de *Teraesvirta*, de la cual se concluye que no hay suficiente evidencia estadística para rechazar la hipótesis nula que la serie cronológica es lineal en la media, tanto para colones como dolares (Colones: Estadístico `r crclineal@test$statistic[1]` , Valor P `r crclineal@test$p.value[1]` ; Estadístico `r usdlineal@test$statistic[1]` , Valor P `r usdlineal@test$p.value[1]` )
+
+En la figura \@ref(fig:variabilidadseries) se observa para el caso de colones una variabilidad estable a lo largo del periodo de análisis, por otro lado, los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares se observa una variabilidad importante antes del año 2005, sin embargo, posterior a ese año tiende a estabilizarse.
+
+```{r variabilidadseries , fig.cap="Evolución de la variabilidad de la serie cronológica de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en dolares, febrero 2001 a diciembre-2020"}
+variabilidad_crc <- log(actnetcrc)/log(stats::lag(actnetcrc,1))
+variabilidad_usd <- log(actnetusd)/log(stats::lag(actnetusd,1))
+
+pvariabilidad_crc<-autoplot(variabilidad_crc)+ theme_bw()+ ggtitle('Colones')+
+  scale_y_continuous(limits = c(0.75,1.1))
+pvariabilidad_usd <- autoplot(variabilidad_usd)+ theme_bw()+ ggtitle('Dolares')+
+  scale_y_continuous(limits = c(0.75,1.1))
+
+grid.arrange(pvariabilidad_crc,pvariabilidad_usd,nrow=1,ncol=2)
+```
+
+## 3.2. Modelos
+### 3.2.1. Modelo Lineal
+
+A partir del análisis exploratorio realizado de las series y considerando sus caracteristicas se procedió a estimar 5 modelos de pronóstico lineales por cada serie:
+
+-   Modelo de Suavizamiento Exponencial Holt-Winter Aditivo
+
+-   Modelo de Suavizamiento Exponencial Holt-Winter Multiplicativo
+
+-   3 Modelos univariantes autorregresivos integrados de media movil (ARIMA)
+
+```{r datos muestra}
+## Peridos de Tiempo
+inicio_train<- c(2011,1)
+fin_train<- c(2020,12)
+
+inicio_test <- c(2021,1)
+
+sactnetcrc<- window(actnetcrc,start=inicio_train)
+sactnetcrc_train<- window(actnetcrc,start=inicio_train, end=fin_train)
+sactnetcrc_test<- window(actnetcrc,start=inicio_test)
+
+sactnetusd<- window(actnetusd,start=inicio_train)
+sactnetusd_train<- window(actnetusd,start=inicio_train, end=fin_train)
+sactnetusd_test<- window(actnetusd,start=inicio_test)
+
+h.param <- length(sactnetcrc_test)
+```
+
+#### Serie en Colones
+
+```{r holt winter crc modelos, results = FALSE}
+ht2_multi <- hw(sactnetcrc_train,seasonal="multiplicative",h = h.param)
+ht2_add <- hw(sactnetcrc_train,seasonal="additive",h = h.param)
+
+# summary(ht2_multi)
+# summary(ht2_add)
+
+```
+
+```{r holt winter crc rendimiento, results = FALSE}
+Metricas_HW<-data.frame(
+      Modelo=c(rep("Holt Winter Multiplicativo",2),rep("Holt Winter Aditivo",2)),
+      Dataset= rep(c("Entrenamiento","Prueba"),2),
+      rbind(h2multi=forecast::accuracy(ht2_multi,sactnetcrc_test),h2aditive=forecast::accuracy(ht2_add,sactnetcrc_test)))%>%
+  select(Modelo,Dataset,RMSE,MAE)%>%
+  mutate(MSE=(RMSE)^2)
+```
+
+```{r arima crc seas model, eval=T, echo=F}
+## x13 ARIMA SEAS
+#################################################
+## Ajustar modelo con x13arima seats
+# actnetcrcfittrain<- seas(sactnetcrc_train)
+# view(actnetcrcfittrain)
+# 
+# logactnetcrcfittrain<- seas(logsactnetcrc_train)
+# view(logactnetcrcfittrain)
+
+modelseas1<-seas(
+x = sactnetcrc_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = "ao2020.Mar",
+arima.model = "(0 1 0)(1 0 1)"
+)
+
+## Modelo fijado
+modelseas2<-seas(
+x = sactnetcrc_train,
+transform.function = "none",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = "ao2020.Mar",
+arima.model = "(0 1 0)(0 1 1)"
+)
+
+modelseas3<- seas(
+x = sactnetcrc_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = c("ls2015.May", "ao2020.Mar"),
+arima.model = "(2 1 0)(1 0 0)"
+)
+
+# El modelo preferido es el que tiene el valor mínimo en el AIC
+summary(modelseas1) #AICc:  2742 ## Mejor modelo
+summary(modelseas2) #AICc:  2761 ## Peor Modelo
+summary(modelseas3) #AICc:  2758 ## Segundo mejor Modelo
+
+
+resseas1<-resid(modelseas1)
+resseas2<-resid(modelseas2)
+resseas3<-resid(modelseas3)
+
+```
+
+```{r arima crc residuos estacionariedad}
+#### Estacionariedad de los residuos
+## Media Constante
+
+adf_res_CRC_1<- adf.test(resseas1 , alternative='stationary')
+adf_res_CRC_2<- adf.test(resseas2 , alternative='stationary')
+adf_res_CRC_3<- adf.test(resseas3 , alternative='stationary')
+
+
+# adf_res_CRC_1
+adf_res_CRC_2
+# adf_res_CRC_3
+```
+
+```{r arima crc residuos autocorrelacion, eval=FALSE}
+#### Autocorrelaciòn de los resiudos
+#####################################
+#Autocorrelacion de los residuales y pruebas gráficas
+## Ljung-Box test
+
+# H0: Independencia de los residuos
+# H1: No Independencia de los residuos
+
+# lb_res_CRC_1 <- checkresiduals(modelseas1 , lag=MaxLag2)
+lb_res_CRC_2 <- checkresiduals(modelseas2 , lag=MaxLag2)
+# lb_res_CRC_3 <- checkresiduals(modelseas3 , lag=MaxLag2)
+
+```
+
+```{r arima crc residuos varianza constante arch, eval=T}
+
+#### Varianza Constante de los residuos
+
+## Varianza Constante ARCH Engle's Test for Residual Heteroscedasticity
+# H0: los residuos son homocedasticos
+# H1: los residuos no son homocedasticos
+
+# FinTS::ArchTest(resseas1,lag=12)
+FinTS::ArchTest(resseas2,lag=12)
+# FinTS::ArchTest(resseas3,lag=12)
+
+# autoplot(resseas1^2 )+ theme_bw() ; acf2(resseas1^2, max.lag=MaxLag2)
+autoplot(resseas2^2 )+ theme_bw() ; acf2(resseas2^2, max.lag=MaxLag2)
+# autoplot(resseas3^2 )+ theme_bw() ; acf2(resseas3^2, max.lag=MaxLag2)
+```
+
+```{r arima crc residuos normalidad}
+#### Normalidad de los residuos
+
+#####################################
+#Normalidad de los residuales
+
+# H0: La muestra proviene de una distribución normal.
+# H1: La muestra no proviene de una distribución normal.
+
+## Jarque Bera
+
+jb_res_CRC_1<-jarque.bera.test(resseas1) # Cumple
+jb_res_CRC_2<-jarque.bera.test(resseas2) # Cumple
+jb_res_CRC_3<-jarque.bera.test(resseas3) # Cumple
+
+
+# jb_res_CRC_1
+jb_res_CRC_2
+# jb_res_CRC_3
+
+sw_res_CRC_1<-shapiro.test(resseas1) # Cumple
+sw_res_CRC_2<-shapiro.test(resseas2) # Cumple
+sw_res_CRC_3<-shapiro.test(resseas3) # Cumple
+
+# sw_res_CRC_1
+sw_res_CRC_2
+# sw_res_CRC_3
+
+# car::qqPlot(resseas1)
+# car::qqPlot(resseas2)
+# car::qqPlot(resseas3)
+
+```
+
+```{r rendimientoproncrc , fig.cap="Raíz del Error Cuadratico Medio de los Modelos Lineales según set de datos (entrenamiento y prueba) para la serie de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en Colones"}
+
+pronostico_CRC_1 <-window(series(modelseas1,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_CRC_2 <-window(series(modelseas2,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_CRC_3 <-window(series(modelseas3,"forecast.forecasts"),start=inicio_test,end=c(2021,7))				
+pronostico_CRC_1_train  <- final(modelseas1)			
+pronostico_CRC_2_train  <- final(modelseas2)					
+pronostico_CRC_3_train  <- final(modelseas3)		
+				
+perfor_crc_train_mod_1 <- getPerformance(pronostico_CRC_1_train, sactnetcrc_train)
+perfor_crc_train_mod_2 <- getPerformance(pronostico_CRC_2_train, sactnetcrc_train)
+perfor_crc_train_mod_3 <- getPerformance(pronostico_CRC_3_train, sactnetcrc_train)
+
+
+perfor_crc_test_mod_1 <- getPerformance(pronostico_CRC_1[,1],sactnetcrc_test)
+perfor_crc_test_mod_2 <- getPerformance(pronostico_CRC_2[,1],sactnetcrc_test)
+perfor_crc_test_mod_3 <- getPerformance(pronostico_CRC_3[,1],sactnetcrc_test)
+
+
+Metricas_Sarima_CRC <- data.frame(
+Modelo = rep(
+c(
+"1. ARIMA (0 1 0)(1 0 1) Log",
+"2. ARIMA (0 1 0)(0 1 1) Niveles",
+"3. ARIMA (2 1 0)(1 0 0) Log"
+),
+2
+),
+Dataset = c(rep("Entrenamiento", 3), rep("Prueba", 3)),
+rbind(
+perfor_crc_train_mod_1,
+perfor_crc_train_mod_2,
+perfor_crc_train_mod_3,
+perfor_crc_test_mod_1,
+perfor_crc_test_mod_2,
+perfor_crc_test_mod_3
+)
+)
+
+Metricas_Mod_Lin<- bind_rows(Metricas_HW,Metricas_Sarima_CRC)
+#Metricas_Mod_Lin<- Metricas_Sarima_CRC
+
+knitr::kable(Metricas_Mod_Lin)
+
+ggplot(Metricas_Mod_Lin) +
+  aes(x = Modelo, fill = Dataset, weight = RMSE) +
+  geom_bar() +
+  scale_fill_manual(values = c(Entrenamiento = "#E69999",
+                               Prueba = "#5C7FA7")) +
+  labs(x = "Método", y = "RMSE") +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+
+```
+
+```{r pronostico mejor crc}
+### Holt-Winter Aditivo
+# ht2_add_all <- hw(sactnetcrc,seasonal="additive",h = 5)
+# autoplot(ht2_add_all)+
+#   theme_bw()
+
+### Arima (2,1,0) (1,0,1) Log
+modelseas2_all<-seas(
+x = sactnetcrc_train,
+transform.function = "none",
+regression.aictest = NULL,
+outlier = NULL,
+regression.variables = "ao2020.Mar",
+arima.model = "(0 1 0)(0 1 1)"
+)
+
+
+autoplot(sactnetcrc)+
+  autolayer(window(series(modelseas2_all,"forecast.forecasts"),start=c(2021,8),end=c(2021,12)))+
+  theme_bw()
+
+
+```
+
+
+#### Serie en Dolares
+
+```{r holt winter usd modelos, results = FALSE}
+ht2_multi_usd <- hw(sactnetusd_train,seasonal="multiplicative",h = h.param)
+ht2_add_usd <- hw(sactnetusd_train,seasonal="additive",h = h.param)
+
+summary(ht2_multi_usd)
+summary(ht2_add_usd)
+
+```
+
+```{r holt winter usd rendimiento, results = FALSE}
+Metricas_HW_usd<-data.frame(
+      Modelo=c(rep("Holt Winter Multiplicativo",2),rep("Holt Winter Aditivo",2)),
+      Dataset= rep(c("Entrenamiento","Prueba"),2),
+      rbind(h2multi=forecast::accuracy(ht2_multi_usd,sactnetusd_test),h2aditive=forecast::accuracy(ht2_add_usd,sactnetusd_test)))%>%
+  select(Modelo,Dataset,RMSE,MAE)%>%
+  mutate(MSE=(RMSE)^2)
+
+```
+
+```{r arima usd seas model, eval=T, echo=F}
+## x13 ARIMA SEAS
+#################################################
+## Ajustar modelo con x13arima seats
+# actnetusdfittrain<- seas(sactnetusd_train)
+# view(actnetusdfittrain)
+
+
+modelseas1_usd<-seas(
+x = sactnetusd_train,
+transform.function = "none",
+regression.aictest = NULL,
+outlier = NULL,
+arima.model = "(0 1 1)(1 1 0)"
+)
+
+## Modelo fijado
+modelseas2_usd<-seas(
+x = sactnetusd_train,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+arima.model = "(0 1 1)(0 1 1)"
+)
+
+modelseas3_usd<- seas(
+x = sactnetusd_train,
+transform.function = "none",
+regression.aictest = NULL,
+outlier = NULL,
+arima.model = "(0 1 1)(0 1 1)"
+)
+
+
+
+# summary(modelseas1) 
+summary(modelseas2) 
+# summary(modelseas3) 
+
+resseas1_usd<-resid(modelseas1_usd)
+resseas2_usd<-resid(modelseas2_usd)
+resseas3_usd<-resid(modelseas3_usd)
+
+```
+
+```{r arima usd residuos estacionariedad}
+
+#### Estacionariedad de los residuos
+
+## Media Constante
+
+adf_res_usd_1<- adf.test(resseas1_usd , alternative='stationary')
+adf_res_usd_2<- adf.test(resseas2_usd , alternative='stationary')
+adf_res_usd_3<- adf.test(resseas3_usd , alternative='stationary')
+
+
+# adf_res_usd_1
+adf_res_usd_2
+# adf_res_usd_3
+```
+
+```{r arima usd residuos autocorrelacion}
+#### Autocorrelaciòn de los resiudos
+#####################################
+#Autocorrelacion de los residuales y pruebas gráficas
+## Ljung-Box test
+
+# H0: Independencia de los residuos
+# H1: No Independencia de los residuos
+
+# lb_res_usd_1 <- checkresiduals(modelseas1_usd , lag=MaxLag2)
+lb_res_usd_2 <- checkresiduals(modelseas2_usd , lag=MaxLag2)
+# lb_res_usd_3 <- checkresiduals(modelseas3_usd , lag=MaxLag2)
+
+```
+
+```{r arima usd residuos normalidad}
+#####################################
+#Normalidad de los residuales
+
+# H0: La muestra proviene de una distribución normal.
+# H1: La muestra no proviene de una distribución normal.
+
+## Jarque Bera
+
+jb_res_usd_1<-jarque.bera.test(resseas1_usd) # Cumple
+jb_res_usd_2<-jarque.bera.test(resseas2_usd) # Cumple
+jb_res_usd_3<-jarque.bera.test(resseas3_usd) # Cumple
+
+
+# jb_res_usd_1
+jb_res_usd_2
+# jb_res_usd_3
+
+sw_res_usd_1<-shapiro.test(resseas1_usd) # Cumple
+sw_res_usd_2<-shapiro.test(resseas2_usd) # Cumple
+sw_res_usd_3<-shapiro.test(resseas3_usd) # Cumple
+
+# sw_res_usd_1
+sw_res_usd_2
+# sw_res_usd_3
+
+# car::qqPlot(resseas1_usd)
+car::qqPlot(resseas2_usd)
+# car::qqPlot(resseas3_usd)
+
+```
+
+```{r arima usd residuos varianza constante arch, eval=T}
+#### Varianza Constante de los residuos
+## Varianza Constante ARCH Engle's Test for Residual Heteroscedasticity
+# H0: los residuos son homocedasticos
+# H1: los residuos no son homocedasticos
+
+# FinTS::ArchTest(resseas1_usd,lag=12)
+# FinTS::ArchTest(resseas2_usd,lag=12)
+FinTS::ArchTest(resseas3_usd,lag=12)
+
+# autoplot(resseas1_usd^2 )+ theme_bw(); acf2(resseas1_usd^2, max.lag=MaxLag2)
+autoplot(resseas2_usd^2 )+ theme_bw(); acf2(resseas2_usd^2, max.lag=MaxLag2)
+# autoplot(resseas3_usd^2 )+ theme_bw(); acf2(resseas3_usd^2, max.lag=MaxLag2)
+```
+
+```{r arima usd rendimiento}
+
+### Performance de los modelos
+
+pronostico_usd_1 <- window(series(modelseas1_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_usd_2 <- window(series(modelseas2_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+pronostico_usd_3 <- window(series(modelseas3_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+
+pronostico_usd_1_train  <- final(modelseas1_usd)			
+pronostico_usd_2_train  <- final(modelseas2_usd)					
+pronostico_usd_3_train  <- final(modelseas3_usd)		
+				
+perfor_usd_train_mod_1 <- getPerformance(pronostico_usd_1_train, sactnetusd_train)
+perfor_usd_train_mod_2 <- getPerformance(pronostico_usd_2_train, sactnetusd_train)
+perfor_usd_train_mod_3 <- getPerformance(pronostico_usd_3_train, sactnetusd_train)
+
+
+perfor_usd_test_mod_1 <- getPerformance(pronostico_usd_1[,1],sactnetusd_test)
+perfor_usd_test_mod_2 <- getPerformance(pronostico_usd_2[,1],sactnetusd_test)
+perfor_usd_test_mod_3 <- getPerformance(pronostico_usd_3[,1],sactnetusd_test)
+
+
+Metricas_Sarima_usd <- data.frame(
+Modelo = rep(
+c(
+"1.ARIMA (0 1 1)(1 1 0) Niveles",
+"2.ARIMA (0 1 1)(0 1 1) Log",
+"3.ARIMA (0 1 1)(0 1 1) Niveles"
+),
+2
+),
+Dataset = c(rep("Entrenamiento", 3), rep("Prueba", 3)),
+rbind(
+perfor_usd_train_mod_1,
+perfor_usd_train_mod_2,
+perfor_usd_train_mod_3,
+perfor_usd_test_mod_1,
+perfor_usd_test_mod_2,
+perfor_usd_test_mod_3
+)
+)
+
+Metricas_Mod_Lin<- bind_rows(Metricas_HW_usd,Metricas_Sarima_usd)
+#Metricas_Mod_Lin<- Metricas_Sarima_usd
+
+ggplot(Metricas_Mod_Lin) +
+  aes(x = Modelo, fill = Dataset, weight = RMSE) +
+  geom_bar() +
+  scale_fill_manual(values = c(Entrenamiento = "#E69999",
+                               Prueba = "#5C7FA7")) +
+  labs(x = "Método", y = "RMSE", title = "Colones") +
+  coord_flip() +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+
+```
+
+```{r pronostico mejor usd}
+### Holt-Winter MULTIPLICATUVI
+# ht2_multi_all <- hw(sactnetusd,seasonal="multiplicative",h = 5)
+# autoplot(ht2_multi_all)+
+#   theme_bw()
+
+### Arima (2,1,0) (1,0,1) Log
+modelseas2_all<-seas(
+x = sactnetusd,
+transform.function = "log",
+regression.aictest = NULL,
+outlier = NULL,
+arima.model = "(0 1 1)(0 1 1)"
+)
+
+
+autoplot(sactnetusd)+
+  autolayer(window(series(modelseas2_all,"forecast.forecasts"),start=c(2021,8),end=c(2021,12)))+
+  theme_bw()
+
+
+```
+
+### 3.2.2. Modelo No Lineal
+
+#### Serie en Colones
+##### TAR
+
+```{r, include=F}
+rm(list=ls()[!ls() %in% c('actnetcrc','actnetusd','actnet',"fin_train","inicio_test","inicio_train","sactnetcrc","sactnetcrc_test","sactnetcrc_train","sactnetusd","sactnetusd_test","sactnetusd_train")])
+```
+
+```{r ,eval=F}
+
+# m orden
+pm <- 1:3
+
+mod.list.tar<-list()
+AIC.best.list<-list()
+
+AICM = NULL
+model.best <- list(d=0, p1=0, p2=0)
+AIC.best = 2888
+
+for(l in pm){
+  for(j in pm){
+    for(i in pm){
+      set.seed(777)
+      model.tar.s = tar(sactnetcrc_train,p1=j,p2=i,d=l)
+      mod.list.tar[[paste(j,i,l,sep="-")]]<-model.tar.s$AIC
+      #print(paste(j,i,l,sep="-"))    
+      
+      if (model.tar.s$AIC < AIC.best) {
+		    AIC.best = model.tar.s$AIC
+		    AIC.best.list[[paste(j,i,l,sep="-")]]<-AIC.best
+		    #print(AIC.best)
+		    model.best$d = l
+		    model.best$p1 = model.tar.s$p1
+		    model.best$p2 = model.tar.s$p2 
+		    print(paste(model.tar.s$p1,model.tar.s$p2,l,sep="-")) }
+    }
+  }
+}
+
+# AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
+#   arrange(`1`)
+# 
+# knitr::kable(head(AICTar,20))
+
+AICTarBest<-bind_rows(AIC.best.list,.id = "Ordene-delay")%>%
+  arrange(`1`)
+
+knitr::kable(head(AICTarBest,20))
+
+```
+
+```{r}
+mod.tar1<-TSA::tar(sactnetcrc_train,p1=2,p2=3,d=1)  
+mod.tar2<-TSA::tar(sactnetcrc_train,p1=3,p2=1,d=1)  
+mod.tar3<-TSA::tar(sactnetcrc_train,p1=3,p2=2,d=1)  
+
+mod.tar1$thd
+mod.tar2$thd
+mod.tar3$thd
+
+mod.tar1$qr1$coefficients
+mod.tar2$qr1$coefficients
+mod.tar3$qr1$coefficients
+
+mod.tar1$qr2$coefficients
+mod.tar2$qr2$coefficients
+mod.tar3$qr2$coefficients
+
+cbind(
+Modelo=c("p1=2,p2=3,d=1",
+         "p1=3,p2=1,d=1",
+         "p1=3,p2=2,d=1"),
+AIC=c(mod.tar1$AIC,
+mod.tar2$AIC,
+mod.tar3$AIC))%>%
+  knitr::kable()
+
+
+#tsdiag(mod.tar1)
+tsdiag(mod.tar2)
+#tsdiag(mod.tar3)
+
+
+checkresiduals(ts(mod.tar1$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar2$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar3$residuals,start=c(2011,1),frequency = 12))
+```
+
+
+```{r}
+prontar1<- ts(as.vector(predict(mod.tar1,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar2<- ts(as.vector(predict(mod.tar2,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar3<- ts(as.vector(predict(mod.tar3,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+
+fit1<-ts(as.vector(mod.tar1$y)-as.vector(mod.tar1$residuals),start =c(2011,1),frequency = 12)
+fit2<-ts(sactnetcrc_train-mod.tar2$residuals,start =c(2011,1),frequency = 12)
+fit3<-ts(sactnetcrc_train-mod.tar3$residuals,start =c(2011,1),frequency = 12)
+
+autoplot(sactnetcrc_train)+
+  autolayer(fit1)+
+  autolayer(fit2)+
+  autolayer(fit3)+
+  theme_bw()
+
+Metrics::rmse(sactnetcrc_test, prontar1)
+Metrics::rmse(sactnetcrc_test, prontar2)
+Metrics::rmse(sactnetcrc_test, prontar3)
+
+autoplot(sactnetcrc_test)+
+  autolayer(prontar1)+
+  autolayer(prontar2)+
+  autolayer(prontar3)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
+```
+
+
+##### SETAR
+
+Thus the threshold delay, the number of lags in each regime and the threshold value are computed.
+
+```{r, eval=T}
+
+Setar1 <-
+  selectSETAR(
+    sactnetcrc_train, 
+    include = c("const", "trend","none", "both"),
+    m = 3,
+    thDelay = seq(1, 2, by = 1),
+    nthresh = 2,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+Setar2 <-
+  selectSETAR(
+    sactnetcrc_train,
+    m = 3,
+    d=2,
+    thDelay = seq(1, 2, by = 1),
+    nthresh = 2,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+Setar3 <-
+  selectSETAR(
+    sactnetcrc_train,
+    m = 3,
+    thDelay = seq(0, 2, by = 1),
+    nthresh = 1,
+    d = 1,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+Setar4 <-
+  selectSETAR(
+    sactnetcrc_train,
+    m = 3,
+    thDelay = seq(0, 2, by = 1),
+    nthresh = 1,
+    d = 2,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+
+Setar1$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+
+
+Setar2$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+
+Setar3$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+
+Setar4$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+```
+
+```{r Modelos Seleccionados}
+
+modeloas1 <-
+  setar(
+    sactnetcrc_train,
+    m = 3,
+    mL = 3,
+    mH = 1,
+    d=1,
+    nthresh = 1,
+    thDelay = 2,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas1) #residuals variance = 0.005525,  AIC = -632, MAPE = 0.4352%
+# plot(modeloas1)
+checkresiduals(ts(modeloas1$residuals,start=c(2011,1),frequency = 12))
+
+modeloas2 <-
+  setar(
+    sactnetcrc_train,
+    m = 3,
+    mL = 2,
+    mH = 3,
+    d=2,
+    nthresh = 1,
+    thDelay = 2,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas2) # residuals variance = 0.005857,  AIC = -635, MAPE = 0.4584%
+# plot(modeloas2)
+checkresiduals(ts(modeloas2$residuals,start=c(2011,1),frequency = 12))
+
+modeloas3 <-
+  setar(
+    sactnetcrc_train,
+    m = 3,
+    mL = 3,
+    mH = 2,
+    d=1,
+    nthresh = 1,
+    thDelay = 0,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas3) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
+# plot(modeloas3)
+checkresiduals(ts(modeloas3$residuals,start=c(2011,1),frequency = 12))
+
+modeloas4 <-
+  setar(
+    sactnetcrc_train,
+    m = 3,
+    mL = 1,
+    mH = 2,
+    d=2,
+    nthresh = 1,
+    thDelay = 0,
+    type = "level"
+  )
+summary(modeloas4) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
+# plot(modeloas4)
+checkresiduals(ts(modeloas4$residuals,start=c(2011,1),frequency = 12))
+
+
+AIC(modeloas1)
+AIC(modeloas2)
+AIC(modeloas3)
+AIC(modeloas4)
+```
+
+```{r}
+pronsetar1<- predict(modeloas1, n.ahead = 7)
+pronsetar2<- predict(modeloas2, n.ahead = 7)
+pronsetar3<- predict(modeloas3, n.ahead = 7)
+pronsetar4<- predict(modeloas4, n.ahead = 7)
+
+fit1<-ts(modeloas1$fitted.values,start =c(2011,1),frequency = 12)
+fit2<-ts(modeloas2$fitted.values,start =c(2011,1),frequency = 12)
+fit3<-ts(modeloas3$fitted.values,start =c(2011,1),frequency = 12)
+fit4<-ts(modeloas4$fitted.values,start =c(2011,1),frequency = 12)
+
+autoplot(sactnetcrc_train)+
+  autolayer(fit1)+
+  autolayer(fit2)+
+  autolayer(fit3)+
+  autolayer(fit4)+
+  theme_bw()
+
+data.frame(
+Modelo= c(
+  "1) m = 3,mL = 3,mH = 1, d=1",
+  "2) m = 3,mL = 2,mH = 3, d=2",
+  "3) m = 3,mL = 3,mH = 2, d=1",
+  "4) m = 3,mL = 1,mH = 2, d=2"
+),
+RMSE=c(
+  Metrics::rmse(sactnetcrc_test, pronsetar1),
+  Metrics::rmse(sactnetcrc_test, pronsetar2),
+  Metrics::rmse(sactnetcrc_test, pronsetar3),
+  Metrics::rmse(sactnetcrc_test, pronsetar4)))%>%
+  arrange(RMSE)%>%
+  knitr::kable()
+
+autoplot(sactnetcrc_test)+
+  autolayer(pronsetar1)+
+  autolayer(pronsetar2)+
+  autolayer(pronsetar3)+
+  autolayer(pronsetar4)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
+```
+
+##### Metricas Generales
+
+```{r , eval=T}
+Metrics::rmse(sactnetcrc_test,(prontar2))
+Metrics::rmse(sactnetcrc_test, (pronsetar4))
+
+autoplot(sactnetcrc_test)+
+  autolayer(prontar2)+
+  autolayer(pronsetar4)+
+  theme_bw()+
+  scale_y_continuous(limits = c(500000,1400000))
+```
+
+#### Serie en Dolares
+##### TAR
+
+```{r ,eval=F}
+# m orden
+pm <- 1:4
+
+mod.list.tar<-list()
+AIC.best.list<-list()
+
+AICM = NULL
+model.best <- list(d=0, p1=0, p2=0)
+AIC.best = 10000
+
+for(l in pm){
+  for(j in pm){
+    for(i in pm){
+      set.seed(777)
+      model.tar.s = tar(sactnetusd_train,p1=j,p2=i,d=l)
+      mod.list.tar[[paste(j,i,l,sep="-")]]<-model.tar.s$AIC
+      print(paste("Modelo:",j,i,l,sep="-"))    
+      
+      if (model.tar.s$AIC < AIC.best) {
+		    AIC.best = model.tar.s$AIC
+		    AIC.best.list[[paste(j,i,l,sep="-")]]<-AIC.best
+		    #print("Modelo:",j,i,l,"AIC",AIC.best)
+		    model.best$d = l
+		    model.best$p1 = model.tar.s$p1
+		    model.best$p2 = model.tar.s$p2 
+		    print(paste(model.tar.s$p1,model.tar.s$p2,l,sep="-")) }
+    }
+  }
+}
+
+# AICTar<-bind_rows(mod.list.tar,.id = "Ordene-delay")%>%
+#   arrange(`1`)
+# 
+# knitr::kable(head(AICTar,20))
+
+AICTarBest<-bind_rows(AIC.best.list,.id = "Ordene-delay")%>%
+  arrange(`1`)
+
+knitr::kable(head(AICTarBest,20))
+```
+
+```{r}
+mod.tar1.usd<-TSA::tar(sactnetusd_train,p1=3,p2=4,d=1)  
+mod.tar2.usd<-TSA::tar(sactnetusd_train,p1=1,p2=2,d=1)  
+mod.tar3.usd<-TSA::tar(sactnetusd_train,p1=1,p2=3,d=1)  
+
+mod.tar1.usd$thd
+mod.tar2.usd$thd
+mod.tar3.usd$thd
+
+mod.tar1.usd$qr1$coefficients
+mod.tar2.usd$qr1$coefficients
+mod.tar3.usd$qr1$coefficients
+
+mod.tar1.usd$qr2$coefficients
+mod.tar2.usd$qr2$coefficients
+mod.tar3.usd$qr2$coefficients
+
+data.frame(
+Modelo=c("p1=3,p2=4,d=1",
+         "p1=1,p2=2,d=1",
+         "p1=1,p2=3,d=1"),
+AIC=c(mod.tar1.usd$AIC,
+mod.tar2.usd$AIC,
+mod.tar3.usd$AIC))%>%
+  arrange(AIC)%>%
+  knitr::kable()
+
+
+tsdiag(mod.tar1.usd)
+tsdiag(mod.tar2.usd)
+tsdiag(mod.tar3.usd)
+
+
+checkresiduals(ts(mod.tar1.usd$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar2.usd$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar3.usd$residuals,start=c(2011,1),frequency = 12))
+```
+
+
+```{r}
+prontar1.usd<- ts(as.vector(predict(mod.tar1.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar2.usd<- ts(as.vector(predict(mod.tar2.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar3.usd<- ts(as.vector(predict(mod.tar3.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+
+fit1.usd<-ts(as.vector(mod.tar1.usd$y)-as.vector(mod.tar1.usd$residuals),start =c(2011,1),frequency = 12)
+fit2.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar2.usd$residuals,start =c(2011,1),frequency = 12)
+fit3.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar3.usd$residuals,start =c(2011,1),frequency = 12)
+
+autoplot(sactnetusd_train)+
+  autolayer(fit1.usd)+
+  autolayer(fit2.usd)+
+  autolayer(fit3.usd)+
+  theme_bw()
+
+data.frame(
+Modelo=c("p1=3,p2=4,d=1",
+         "p1=1,p2=2,d=1",
+         "p1=1,p2=3,d=1"),
+RMSE=c(
+  Metrics::rmse(sactnetusd_test, prontar1.usd),
+  Metrics::rmse(sactnetusd_test, prontar2.usd),
+  Metrics::rmse(sactnetusd_test, prontar3.usd)))%>%
+  arrange(RMSE)%>%
+  knitr::kable()
+
+
+
+autoplot(sactnetusd_test)+
+  autolayer(prontar1.usd)+
+  autolayer(prontar2.usd)+
+  autolayer(prontar3.usd)+
+  theme_bw()
+```
+
+##### SETAR
+
+Thus the threshold delay, the number of lags in each regime and the threshold value are computed.
+
+```{r, eval=t}
+Setar1.usd <-
+  selectSETAR(
+    sactnetusd_train, 
+    include = c("const", "trend","none", "both"),
+    m = 4,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+Setar2.usd <-
+  selectSETAR(
+    sactnetusd_train,
+    m = 4,
+    d=2,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+Setar3.usd <-
+  selectSETAR(
+    sactnetusd_train,
+    m = 4,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
+    d = 1,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+Setar4.usd <-
+  selectSETAR(
+    sactnetusd_train,
+    m = 4,
+    thDelay = seq(0, 3, by = 1),
+    nthresh = 3,
+    d = 2,
+    criterion = "AIC",
+    type = "level",
+    plot = T,
+    trace = T
+  )
+
+
+Setar1.usd$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+
+
+Setar2.usd$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+
+Setar3.usd$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+
+Setar4.usd$allTh%>%
+  as.data.frame()%>%
+  arrange(AIC,thDelay,mL,mH)%>%
+  head(5)
+```
+
+```{r}
+
+modeloas1.usd <-
+  setar(
+    sactnetusd_train,
+    mL = 1,
+    mH = 3,
+    d=1,
+    nthresh = 1,
+    thDelay = 2,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas1.usd) #residuals variance = 0.005525,  AIC = -632, MAPE = 0.4352%
+# plot(modeloas1)
+checkresiduals(ts(modeloas1.usd$residuals,start=c(2011,1),frequency = 12))
+
+modeloas2.usd <-
+  setar(
+    sactnetusd_train,
+    mL = 3,
+    mH = 1,
+    d=2,
+    nthresh = 1,
+    thDelay = 1,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas2.usd) # residuals variance = 0.005857,  AIC = -635, MAPE = 0.4584%
+# plot(modeloas2)
+checkresiduals(ts(modeloas2.usd$residuals,start=c(2011,1),frequency = 12))
+
+modeloas3.usd <-
+  setar(
+    sactnetusd_train,
+    mL = 1,
+    mH = 1,
+    d=1,
+    nthresh = 1,
+    thDelay = 1,
+    type = "level"
+  )
+## Raiz Unitaria
+summary(modeloas3.usd) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
+# plot(modeloas3)
+checkresiduals(ts(modeloas3.usd$residuals,start=c(2011,1),frequency = 12))
+
+modeloas4.usd <-
+  setar(
+    sactnetusd_train,
+    m = 3,
+    mL = 1,
+    mH = 2,
+    d=2,
+    nthresh = 1,
+    thDelay = 0,
+    type = "level"
+  )
+summary(modeloas4.usd) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
+# plot(modeloas4)
+checkresiduals(ts(modeloas4.usd$residuals,start=c(2011,1),frequency = 12))
+
+
+AIC(modeloas1.usd)
+AIC(modeloas2.usd)
+AIC(modeloas3.usd)
+AIC(modeloas4.usd)
+```
+
+```{r}
+pronsetar1.usd<- predict(modeloas1.usd, n.ahead = 7)
+pronsetar2.usd<- predict(modeloas2.usd, n.ahead = 7)
+pronsetar3.usd<- predict(modeloas3.usd, n.ahead = 7)
+pronsetar4.usd<- predict(modeloas4.usd, n.ahead = 7)
+
+fit1.usd<-ts(modeloas1.usd$fitted.values,start =c(2011,1),frequency = 12)
+fit2.usd<-ts(modeloas2.usd$fitted.values,start =c(2011,1),frequency = 12)
+fit3.usd<-ts(modeloas3.usd$fitted.values,start =c(2011,1),frequency = 12)
+fit4.usd<-ts(modeloas4.usd$fitted.values,start =c(2011,1),frequency = 12)
+
+autoplot(sactnetusd_train)+
+  autolayer(fit1.usd)+
+  autolayer(fit2.usd)+
+  autolayer(fit3.usd)+
+  autolayer(fit4.usd)+
+  theme_bw()
+
+data.frame(
+Modelo= c(
+  "1) m = 3,mL = 3,mH = 1, d=1",
+  "2) m = 3,mL = 2,mH = 3, d=2",
+  "3) m = 3,mL = 3,mH = 2, d=1",
+  "4) m = 3,mL = 1,mH = 2, d=2"
+),
+RMSE=c(
+  Metrics::rmse(sactnetusd_test, pronsetar1.usd),
+  Metrics::rmse(sactnetusd_test, pronsetar2.usd),
+  Metrics::rmse(sactnetusd_test, pronsetar3.usd),
+  Metrics::rmse(sactnetusd_test, pronsetar4.usd)))%>%
+  arrange(RMSE)%>%
+  knitr::kable()
+
+autoplot(sactnetusd_test)+
+  autolayer(pronsetar1.usd)+
+  autolayer(pronsetar2.usd)+
+  autolayer(pronsetar3.usd)+
+  autolayer(pronsetar4.usd)+
+  theme_bw()
+```
+
+##### Metricas Generales
+
+```{r , eval=T}
+Metrics::rmse(sactnetusd_test,prontar1.usd)
+Metrics::rmse(sactnetusd_test, pronsetar4.usd)
+
+
+autoplot(sactnetusd_test)+
+  autolayer(prontar1.usd)+
+  autolayer(pronsetar4.usd)+
+  theme_bw()
+```
+
+
+### 3.2.3. Modelo Machine Learning
+
+```{r}
+# Machine Learning
+library(tidymodels)
+library(modeltime)
+library(modeltime.ensemble)
+library(modeltime.resample)
+library(timetk)
+library(tidyverse)
+```
+
+```{r , include=F}
+SeriesDatos <- read_excel("~/Google Drive/Mi unidad/1.Maestria II Ciclo 2021/Curso de Analisis De Casos/Caso II/Datos/Base Datos.xlsx")%>%
+  janitor::clean_names()%>%
+  mutate(ActivoNeto=paste0(activo_neto,"-01"))%>%
+  rename('ActNetCRC'=crc,
+         'ActNetUSD'=usd)%>%
+  select(ActivoNeto,ActNetCRC,ActNetUSD)
+ 
+
+colones <- SeriesDatos%>%
+  select(Date=ActivoNeto,value=ActNetCRC)%>%
+  mutate(Date=as.Date(Date)
+         )
+
+dolares <- SeriesDatos%>%
+  select(Date=ActivoNeto,value=ActNetUSD)%>%
+  mutate(Date=as.Date(Date)
+         )
+```
+
+#### Serie en Colones
+
+```{r,eval=FALSE}
+colones%>%
+  plot_time_series(Date,value,.facet_ncol = 3, .interactive = F)
+```
+
+##### DATA PREPARATION
+
+```{r}
+FORECAST_HORIZON <- 5
+```
+
+###### Full = Training + Forecast Dataset
+
+```{r}
+full_data_tbl <- colones%>%
+  select(Date,value)%>%
+  future_frame(
+    .date_var = Date,
+    .length_out = FORECAST_HORIZON,
+    .bind_data = T
+  )
+
+is.na(full_data_tbl$value)
+```
+
+###### Training Data
+
+```{r}
+data_prepared_tbl <- full_data_tbl[!is.na(full_data_tbl$value),]
+  
+# data_prepared_tbl%>%
+#   tk_summary_diagnostics()
+```
+
+###### Future Data Forecast
+
+```{r}
+future_tbl <- full_data_tbl[is.na(full_data_tbl$value),]
+```
+
+##### SPLITTING
+
+```{r}
+splits <- data_prepared_tbl%>%
+  arrange(Date)%>%
+  time_series_split(
+    data_var=Date,
+    assess = FORECAST_HORIZON,
+    cumulative = T
+  )
+
+splits
+
+```
+
+##### PREPROCESOR
+
+```{r}
+recipe_spec_1 <- recipe(value~., training(splits))%>%
+  step_timeseries_signature(Date)%>%
+  ## Elimina las columnas o atributos que no aportan
+  step_rm(matches("(.iso$)|(.xts)|(day)|(hour)|(minute)|(second)|(am.pm)|(week)")) %>%
+  step_normalize(Date_index.num,Date_year)%>%
+  step_mutate(Date_month = factor(Date_month,ordered = T))%>%
+  step_dummy(all_nominal(),one_hot = T)
+
+recipe_spec_1 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_2 <- recipe_spec_1%>%
+  update_role(Date,new_role = "ID")
+
+recipe_spec_2 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_1 %>% prep() %>% summary()
+recipe_spec_2 %>% prep() %>% summary()
+```
+
+##### MODELS
+
+###### autoarima xgboost 
+
+```{r}
+wflw_fit_autoarima_boost <- workflow()%>%
+  add_model(
+    arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+###### prophet 
+
+```{r}
+wflw_fit_prophet <- workflow()%>%
+  add_model(
+    prophet_reg() %>% set_engine("prophet")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+###### XGBOOST
+
+```{r}
+wflw_fit_xgboost_0_015 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.15) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_xgboost_0_1 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.1) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_xgboost_0_3 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.3) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+```
+
+###### Random Forest
+
+```{r}
+wflw_fit_rf_1000 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 1000
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_rf_500 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 500
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_rf_200 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 200
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+###### SVM
+
+```{r}
+wflw_fit_svm <- workflow()%>%
+  add_model(
+    svm_rbf() %>% set_engine("kernlab")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+###### prophet_boost
+
+```{r}
+wflw_fit_prophet_boost <- workflow()%>%
+  add_model(
+    prophet_boost(
+      seasonality_yearly = F,
+      seasonality_weekly = F,
+      seasonality_daily =  F,
+    ) %>% 
+      set_engine("prophet_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+##### MODELTIME WORKFLOW
+
+###### modeltime table
+
+```{r}
+submodels_tbl <- modeltime_table(
+  wflw_fit_autoarima_boost,
+  #wflw_fit_prophet, #1
+  wflw_fit_prophet_boost, #2
+  #wflw_fit_xgboost_0_015, #3
+  #wflw_fit_xgboost_0_1, #4
+  wflw_fit_xgboost_0_3, #5
+  #wflw_fit_rf_1000, #6
+  wflw_fit_rf_500 #, #7
+  #wflw_fit_rf_200, #8
+  #wflw_fit_svm #9
+)
+
+submodels_tbl
+```
+
+###### calibrate Testing Data
+
+```{r}
+submodels_calibrated_tbl <- submodels_tbl %>%
+  modeltime_calibrate(testing(splits))
+
+submodels_calibrated_tbl
+```
+
+###### Measure Test Accuracy
+
+```{r}
+submodels_calibrated_tbl%>% 
+  modeltime_accuracy()%>%
+  arrange(rmse)
+```
+
+###### Visualize test forecast
+
+```{r}
+submodels_calibrated_tbl %>%
+  modeltime_forecast(
+    new_data = testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+###### Refit on full training dataset
+
+```{r}
+submodels_refit_tbl <- submodels_calibrated_tbl %>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+###### Visualize Submodel Forecast
+
+```{r}
+submodels_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+###### Validación cruzada
+
+https://cran.r-project.org/web/packages/modeltime.resample/vignettes/getting-started.html
+
+```{r}
+resamples_tscv <- time_series_cv(
+    data        = data_prepared_tbl,
+    date_var    = Date,
+    assess      = FORECAST_HORIZON,
+    initial     = "36 month",
+    skip        = FORECAST_HORIZON,
+    slice_limit = 5
+)
+
+resamples_tscv
+
+resamples_tscv %>%
+    tk_time_series_cv_plan() %>%
+    plot_time_series_cv_plan(Date, 
+                             value, 
+                             .facet_ncol = 2,
+                             .interactive = T)
+```
+
+**Generate Resample Predictions**
+
+```{r}
+resamples_fitted <- submodels_tbl %>%
+    modeltime_fit_resamples(
+        resamples = resamples_tscv,
+        control   = control_resamples(verbose = FALSE)
+    )
+
+resamples_fitted
+```
+
+**Evaluate the Results**
+
+```{r}
+resamples_fitted %>%
+    plot_modeltime_resamples(
+      .point_size  = 3, 
+      .point_alpha = 0.8,
+      .interactive = T
+    )
+
+resamples_fitted %>%
+    modeltime_resample_accuracy(summary_fns = mean) %>%
+    table_modeltime_accuracy(.interactive = T)
+```
+
+##### ENSEMBLE
+
+###### Ensamble Media y Meta-Learner
+
+```{r}
+ensemble_fit_mean <- submodels_tbl %>%
+  #filter(!.model_id %in% c(1))%>%
+  ensemble_average(type="mean")
+
+
+ensemble_fit_lm <- resamples_fitted %>%
+  ensemble_model_spec(
+    model_spec = linear_reg(
+      penalty = tune(),
+      mixture = tune()
+    ) %>%
+      set_engine("glmnet"),
+    grid = 2,
+    control = control_grid(verbose = TRUE)
+  )
+
+ensemble_fit_xg<- resamples_fitted %>%
+  ensemble_model_spec(
+    model_spec = boost_tree(
+      mtry=tune(),
+      trees=tune(),
+      learn_rate = tune()
+    ) %>% set_engine("xgboost"),
+    control = control_grid(verbose = TRUE)
+  )
+```
+
+```{r}
+ensemble_tbl<- modeltime_table(
+  ensemble_fit_mean,
+  ensemble_fit_lm,
+  ensemble_fit_xg
+)
+```
+
+
+###### Ensemble test Accuracy
+
+```{r}
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_accuracy(testing(splits))%>%
+  arrange(rmse,mae,mape,mase)%>%
+  knitr::kable()
+```
+
+###### Ensemble Test Forecast
+
+```{r}
+ensemble_tbl%>%
+  modeltime_calibrate(testing(splits))%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T,
+    conf_by_id = T,
+    conf_interval = 0.95
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_calibrate(testing(splits))%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+ensemble_tbl_all_model<-ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)
+```
+
+###### Refit Ensemble
+
+```{r}
+ensemble_refit_tbl <- ensemble_tbl%>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+###### Visualize Ensemble Forecast
+
+```{r}
+ensemble_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+```
+
+
+
+
+
+
+
+#### Serie en Dolares
+
+##### DATA
+
+```{r}
+dolares%>%
+  plot_time_series(Date,value,.facet_ncol = 3, .interactive = F)
+```
+
+##### DATA PREPARATION
+
+```{r}
+FORECAST_HORIZON <- 5
+```
+
+###### Full = Training + Forecast Dataset
+
+```{r}
+full_data_tbl <- dolares%>%
+  select(Date,value)%>%
+  future_frame(
+    .date_var = Date,
+    .length_out = FORECAST_HORIZON,
+    .bind_data = T
+  )
+
+```
+
+###### Training Data
+
+```{r}
+data_prepared_tbl <- full_data_tbl[!is.na(full_data_tbl$value),]
+  
+data_prepared_tbl%>%
+  tk_summary_diagnostics()
+```
+
+###### Future Data Forecast
+
+```{r}
+future_tbl <- full_data_tbl[is.na(full_data_tbl$value),]
+```
+
+##### SPLITTING
+
+```{r}
+splits <- data_prepared_tbl%>%
+  arrange(Date)%>%
+  time_series_split(
+    data_var=Date,
+    assess = FORECAST_HORIZON,
+    cumulative = T
+  )
+
+splits
+
+```
+
+##### PREPROCESOR
+
+```{r}
+recipe_spec_1 <- recipe(value~., training(splits))%>%
+  step_timeseries_signature(Date)%>%
+  ## Elimina las columnas o atributos que no aportan
+  step_rm(matches("(.iso$)|(.xts)|(day)|(hour)|(minute)|(second)|(am.pm)|(week)")) %>%
+  step_normalize(Date_index.num,Date_year)%>%
+  step_mutate(Date_month = factor(Date_month,ordered = T))%>%
+  step_dummy(all_nominal(),one_hot = T)
+
+recipe_spec_1 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_2 <- recipe_spec_1%>%
+  update_role(Date,new_role = "ID")
+
+recipe_spec_2 %>% prep() %>% juice() %>% glimpse()
+
+recipe_spec_1 %>% prep() %>% summary()
+recipe_spec_2 %>% prep() %>% summary()
+```
+
+##### MODELS
+
+###### autoarima xgboost 
+
+```{r}
+wflw_fit_autoarima_boost <- workflow()%>%
+  add_model(
+    arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+###### prophet 
+
+```{r}
+wflw_fit_prophet <- workflow()%>%
+  add_model(
+    prophet_reg() %>% set_engine("prophet")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+###### XGBOOST
+
+```{r}
+wflw_fit_xgboost_0_015 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.15) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_xgboost_0_1 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.1) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_xgboost_0_3 <- workflow()%>%
+  add_model(
+    boost_tree(learn_rate=0.3) %>% set_engine("xgboost")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+```
+
+###### Random Forest
+
+```{r}
+wflw_fit_rf_1000 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 1000
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_rf_500 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 500
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+
+wflw_fit_rf_200 <- workflow()%>%
+  add_model(
+    rand_forest(
+                trees = 200
+                ) %>% 
+      set_engine("randomForest")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+###### SVM
+
+```{r}
+wflw_fit_svm <- workflow()%>%
+  add_model(
+    svm_rbf() %>% set_engine("kernlab")
+  )%>%
+  add_recipe(recipe_spec_2)%>%
+  fit(training(splits))
+```
+
+###### prophet_boost
+
+```{r}
+wflw_fit_prophet_boost <- workflow()%>%
+  add_model(
+    prophet_boost(
+      seasonality_yearly = F,
+      seasonality_weekly = F,
+      seasonality_daily =  F,
+    ) %>% 
+      set_engine("prophet_xgboost")
+  )%>%
+  add_recipe(recipe_spec_1)%>%
+  fit(training(splits))
+```
+
+##### MODELTIME WORKFLOW
+
+###### modeltime table
+
+```{r}
+submodels_tbl <- modeltime_table(
+  wflw_fit_autoarima_boost,
+  #wflw_fit_prophet, #1
+  wflw_fit_prophet_boost, #2
+  #wflw_fit_xgboost_0_015, #3
+  #wflw_fit_xgboost_0_1, #4
+  wflw_fit_xgboost_0_3, #5
+  #wflw_fit_rf_1000, #6
+  wflw_fit_rf_500 #, #7
+  #wflw_fit_rf_200, #8
+  #wflw_fit_svm #9
+)
+
+submodels_tbl
+```
+
+###### calibrate Testing Data
+
+```{r}
+submodels_calibrated_tbl <- submodels_tbl %>%
+  modeltime_calibrate(testing(splits))
+
+submodels_calibrated_tbl
+```
+
+###### Measure Test Accuracy
+
+```{r}
+submodels_calibrated_tbl%>% 
+  modeltime_accuracy()%>%
+  arrange(rmse)
+```
+
+###### Visualize test forecast
+
+```{r}
+submodels_calibrated_tbl %>%
+  modeltime_forecast(
+    new_data = testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+###### Refit on full training dataset
+
+```{r}
+submodels_refit_tbl <- submodels_calibrated_tbl %>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+###### Visualize Submodel Forecast
+
+```{r}
+submodels_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+```
+
+###### Validación cruzada
+
+https://cran.r-project.org/web/packages/modeltime.resample/vignettes/getting-started.html
+
+```{r}
+resamples_tscv <- time_series_cv(
+    data        = data_prepared_tbl,
+    date_var    = Date,
+    assess      = FORECAST_HORIZON,
+    initial     = "36 month",
+    skip        = FORECAST_HORIZON,
+    slice_limit = 5
+)
+
+resamples_tscv
+
+resamples_tscv %>%
+    tk_time_series_cv_plan() %>%
+    plot_time_series_cv_plan(Date, 
+                             value, 
+                             .facet_ncol = 2,
+                             .interactive = T)
+```
+
+**Generate Resample Predictions**
+
+```{r}
+resamples_fitted <- submodels_tbl %>%
+    modeltime_fit_resamples(
+        resamples = resamples_tscv,
+        control   = control_resamples(verbose = FALSE)
+    )
+
+resamples_fitted
+```
+
+**Evaluate the Results**
+
+```{r}
+resamples_fitted %>%
+    plot_modeltime_resamples(
+      .point_size  = 3, 
+      .point_alpha = 0.8,
+      .interactive = T
+    )
+
+resamples_fitted %>%
+    modeltime_resample_accuracy(summary_fns = mean) %>%
+    table_modeltime_accuracy(.interactive = T)
+```
+
+##### ENSEMBLE
+
+###### Ensamble Media y Meta-Learner
+
+```{r}
+ensemble_fit_mean <- submodels_tbl %>%
+  #filter(!.model_id %in% c(1))%>%
+  ensemble_average(type="mean")
+
+
+ensemble_fit_lm <- resamples_fitted %>%
+  ensemble_model_spec(
+    model_spec = linear_reg(
+      penalty = tune(),
+      mixture = tune()
+    ) %>%
+      set_engine("glmnet"),
+    grid = 2,
+    control = control_grid(verbose = TRUE)
+  )
+
+ensemble_fit_xg<- resamples_fitted %>%
+  ensemble_model_spec(
+    model_spec = boost_tree(
+      mtry=tune(),
+      trees=tune(),
+      learn_rate = tune()
+    ) %>% set_engine("xgboost"),
+    control = control_grid(verbose = TRUE)
+  )
+```
+
+```{r}
+ensemble_tbl<- modeltime_table(
+  ensemble_fit_mean,
+  ensemble_fit_lm,
+  ensemble_fit_xg
+)
+```
+
+
+###### Ensemble test Accuracy
+
+```{r}
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_accuracy(testing(splits))%>%
+  arrange(rmse,mae,mape,mase)%>%
+  knitr::kable()
+```
+
+###### Ensemble Test Forecast
+
+```{r}
+ensemble_tbl%>%
+  modeltime_calibrate(testing(splits))%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T,
+    conf_by_id = T,
+    conf_interval = 0.95
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)%>%
+  modeltime_calibrate(testing(splits))%>%
+  modeltime_forecast(
+    new_data =  testing(splits),
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+ensemble_tbl_all_model<-ensemble_tbl%>%
+  combine_modeltime_tables(submodels_tbl)
+```
+
+###### Refit Ensemble
+
+```{r}
+ensemble_refit_tbl <- ensemble_tbl%>%
+  modeltime_refit(data_prepared_tbl)
+```
+
+###### Visualize Ensemble Forecast
+
+```{r}
+ensemble_refit_tbl%>%
+  modeltime_forecast(
+    new_data =  future_tbl,
+    actual_data = data_prepared_tbl,
+    keep_data = T
+  )%>%
+  plot_modeltime_forecast(
+    .facet_ncol=2
+  )
+
+```
+
+
+### 3.2.4. Resumen de Modelo
+### 3.2.5. Pronóstico
+## 3.3. Prueba de Tensión
+# 4. Conclusiones
+
+# 5.Anexos
+
+```{r plotoutlier, fig.cap="Costa Rica: Identificación de los valores extremos en los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+# otlier_crc
+# plot(otlier_crc)
+# plot(otlier_usd)
+# otlier_usd
+```
+
+```{r descomposicionplotanexo, eval=T, fig.cap="Costa Rica:Descomposición de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero\n en colones y dolares, febrero-2001 a julio-2021",fig.align="center"}
+
+#descompo
+```
