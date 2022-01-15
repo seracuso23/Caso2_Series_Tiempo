@@ -1867,7 +1867,7 @@ colones%>%
 ##### DATA PREPARATION
 
 ```{r}
-FORECAST_HORIZON <- 5
+FORECAST_HORIZON <- h.param
 ```
 
 ###### Full = Training + Forecast Dataset
