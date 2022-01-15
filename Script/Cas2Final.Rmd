@@ -11,6 +11,8 @@ output:
     fig_height: 4
     fig_caption: yes
     code_folding: hide
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -62,6 +64,8 @@ getPerformance = function(pred, val) {
     perf = data.frame(MAE, RSS, MSE, RMSE)
     return(perf)
 }
+
+#getPerformance(pred, val)
 ```
 
 # 1.Introducción
@@ -377,9 +381,8 @@ A partir del análisis exploratorio realizado de las series y considerando sus c
 ```{r datos muestra}
 ## Peridos de Tiempo
 inicio_train<- c(2011,1)
-fin_train<- c(2020,12)
-
-inicio_test <- c(2021,1)
+fin_train<- c(2021,2)
+inicio_test <- c(2021,3)
 
 sactnetcrc<- window(actnetcrc,start=inicio_train)
 sactnetcrc_train<- window(actnetcrc,start=inicio_train, end=fin_train)
@@ -394,72 +397,127 @@ h.param <- length(sactnetcrc_test)
 
 #### Serie en Colones
 
-```{r holt winter crc modelos, results = FALSE}
-ht2_multi <- hw(sactnetcrc_train,seasonal="multiplicative",h = h.param)
-ht2_add <- hw(sactnetcrc_train,seasonal="additive",h = h.param)
+##### Holt Winter
 
-# summary(ht2_multi)
-# summary(ht2_add)
+**MODELOS**
+
+**Holt Winter Multiplicativo**
+```{r}
+ht2_multi <- hw(sactnetcrc_train, seasonal = "multiplicative", h = h.param)
+
+summary(ht2_multi)
+
+pred_ht2_multi <- ht2_multi$mean
+
+checkresiduals(ht2_multi)
+
 
 ```
+
+**Holt Winter Aditivo**
+```{r holt winter crc modelos, results = FALSE}
+ht2_add <- hw(sactnetcrc_train, seasonal = "additive", h = h.param)
+
+summary(ht2_add)
+
+pred_ht2_add <- ht2_add$mean
+
+checkresiduals(ht2_add)
+
+
+```
+
+**METRICAS HOLT WINTER**
 
 ```{r holt winter crc rendimiento, results = FALSE}
-Metricas_HW<-data.frame(
-      Modelo=c(rep("Holt Winter Multiplicativo",2),rep("Holt Winter Aditivo",2)),
-      Dataset= rep(c("Entrenamiento","Prueba"),2),
-      rbind(h2multi=forecast::accuracy(ht2_multi,sactnetcrc_test),h2aditive=forecast::accuracy(ht2_add,sactnetcrc_test)))%>%
-  select(Modelo,Dataset,RMSE,MAE)%>%
-  mutate(MSE=(RMSE)^2)
+
+perf_ht2_add_train<-getPerformance(ht2_add$model$fitted,sactnetcrc_train)
+perf_ht2_multi_train<-getPerformance(ht2_multi$model$fitted,sactnetcrc_train)
+
+perf_ht2_add<-getPerformance(pred_ht2_add, sactnetcrc_test)
+perf_ht2_multi<-getPerformance(pred_ht2_multi, sactnetcrc_test)
+
+data.frame(
+  Modelo = c("Holt Winter Aditivia",
+             "Holt Winter Multiplicativa"),
+  AIC = c(ht2_add$model$aic,
+          ht2_multi$model$aic),
+  AICc= c(ht2_add$model$aicc,
+          ht2_multi$model$aicc),
+  BIC = c(ht2_add$model$bic,
+          ht2_multi$model$bic))%>%
+  arrange(AIC)%>%
+  knitr::kable(caption="Metricas de Bondad de Ajuste")
+
+MetResHW<-cbind(
+  Modelo = c("Holt Winter Aditivia",
+             "Holt Winter Multiplicativa",
+             "Holt Winter Aditivia",
+             "Holt Winter Multiplicativa"),
+  Dataset=c("Entrenamiento","Entrenamiento","Prueba","Prueba"),
+  rbind(
+    perf_ht2_add_train,
+    perf_ht2_multi_train,
+    perf_ht2_add, 
+    perf_ht2_multi
+        )
+) %>%
+  arrange(RMSE)
+
+MetResHW%>%
+  knitr::kable(caption="Metricas de Ajuste sobre la tabla de validación")
 ```
+
+##### ARIMA
 
 ```{r arima crc seas model, eval=T, echo=F}
 ## x13 ARIMA SEAS
 #################################################
 ## Ajustar modelo con x13arima seats
-# actnetcrcfittrain<- seas(sactnetcrc_train)
-# view(actnetcrcfittrain)
-# 
-# logactnetcrcfittrain<- seas(logsactnetcrc_train)
-# view(logactnetcrcfittrain)
 
-modelseas1<-seas(
-x = sactnetcrc_train,
-transform.function = "log",
-regression.aictest = NULL,
-outlier = NULL,
-regression.variables = "ao2020.Mar",
-arima.model = "(0 1 0)(1 0 1)"
+modelseas1 <- seas(
+  x = sactnetcrc_train,
+  transform.function = "log",
+  regression.aictest = NULL,
+  outlier = NULL,
+  regression.variables = "ao2020.Mar",
+  arima.model = "(0 1 0)(1 0 1)"
 )
 
-## Modelo fijado
-modelseas2<-seas(
-x = sactnetcrc_train,
-transform.function = "none",
-regression.aictest = NULL,
-outlier = NULL,
-regression.variables = "ao2020.Mar",
-arima.model = "(0 1 0)(0 1 1)"
+summary(modelseas1) #AICc:  2930 ## Peor Modelo
+
+modelseas2 <- seas(
+  x = sactnetcrc_train,
+  transform.function = "none",
+  regression.aictest = NULL,
+  outlier = NULL,
+  regression.variables = "ao2020.Mar",
+  arima.model = "(0 1 0)(0 1 1)"
 )
 
-modelseas3<- seas(
-x = sactnetcrc_train,
-transform.function = "log",
-regression.aictest = NULL,
-outlier = NULL,
-regression.variables = c("ls2015.May", "ao2020.Mar"),
-arima.model = "(2 1 0)(1 0 0)"
+summary(modelseas2) #AICc:  2647 ## Mejor modelo
+
+modelseas3 <- seas(
+  x = sactnetcrc_train,
+  transform.function = "log",
+  regression.aictest = NULL,
+  outlier = NULL,
+  regression.variables = c("ls2015.May", "ao2020.Mar"),
+  arima.model = "(2 1 0)(1 0 0)"
 )
 
+summary(modelseas3) #AICc:  2926 ## Segundo mejor Modelo
 # El modelo preferido es el que tiene el valor mínimo en el AIC
-summary(modelseas1) #AICc:  2742 ## Mejor modelo
-summary(modelseas2) #AICc:  2761 ## Peor Modelo
-summary(modelseas3) #AICc:  2758 ## Segundo mejor Modelo
+
+```
 
 
-resseas1<-resid(modelseas1)
-resseas2<-resid(modelseas2)
-resseas3<-resid(modelseas3)
+**Análisis de Supuestos**
 
+```{r}
+resseas1 <- resid(modelseas1)
+resseas2 <- resid(modelseas2)
+resseas3 <- resid(modelseas3)
 ```
 
 ```{r arima crc residuos estacionariedad}
@@ -471,9 +529,9 @@ adf_res_CRC_2<- adf.test(resseas2 , alternative='stationary')
 adf_res_CRC_3<- adf.test(resseas3 , alternative='stationary')
 
 
-# adf_res_CRC_1
+adf_res_CRC_1
 adf_res_CRC_2
-# adf_res_CRC_3
+adf_res_CRC_3
 ```
 
 ```{r arima crc residuos autocorrelacion, eval=FALSE}
@@ -485,9 +543,9 @@ adf_res_CRC_2
 # H0: Independencia de los residuos
 # H1: No Independencia de los residuos
 
-# lb_res_CRC_1 <- checkresiduals(modelseas1 , lag=MaxLag2)
+lb_res_CRC_1 <- checkresiduals(modelseas1 , lag=MaxLag2)
 lb_res_CRC_2 <- checkresiduals(modelseas2 , lag=MaxLag2)
-# lb_res_CRC_3 <- checkresiduals(modelseas3 , lag=MaxLag2)
+lb_res_CRC_3 <- checkresiduals(modelseas3 , lag=MaxLag2)
 
 ```
 
@@ -499,13 +557,13 @@ lb_res_CRC_2 <- checkresiduals(modelseas2 , lag=MaxLag2)
 # H0: los residuos son homocedasticos
 # H1: los residuos no son homocedasticos
 
-# FinTS::ArchTest(resseas1,lag=12)
+FinTS::ArchTest(resseas1,lag=12)
 FinTS::ArchTest(resseas2,lag=12)
-# FinTS::ArchTest(resseas3,lag=12)
+FinTS::ArchTest(resseas3,lag=12)
 
-# autoplot(resseas1^2 )+ theme_bw() ; acf2(resseas1^2, max.lag=MaxLag2)
+autoplot(resseas1^2 )+ theme_bw() ; acf2(resseas1^2, max.lag=MaxLag2)
 autoplot(resseas2^2 )+ theme_bw() ; acf2(resseas2^2, max.lag=MaxLag2)
-# autoplot(resseas3^2 )+ theme_bw() ; acf2(resseas3^2, max.lag=MaxLag2)
+autoplot(resseas3^2 )+ theme_bw() ; acf2(resseas3^2, max.lag=MaxLag2)
 ```
 
 ```{r arima crc residuos normalidad}
@@ -524,17 +582,17 @@ jb_res_CRC_2<-jarque.bera.test(resseas2) # Cumple
 jb_res_CRC_3<-jarque.bera.test(resseas3) # Cumple
 
 
-# jb_res_CRC_1
+jb_res_CRC_1
 jb_res_CRC_2
-# jb_res_CRC_3
+jb_res_CRC_3
 
 sw_res_CRC_1<-shapiro.test(resseas1) # Cumple
 sw_res_CRC_2<-shapiro.test(resseas2) # Cumple
 sw_res_CRC_3<-shapiro.test(resseas3) # Cumple
 
-# sw_res_CRC_1
+sw_res_CRC_1
 sw_res_CRC_2
-# sw_res_CRC_3
+sw_res_CRC_3
 
 # car::qqPlot(resseas1)
 # car::qqPlot(resseas2)
@@ -544,58 +602,120 @@ sw_res_CRC_2
 
 ```{r rendimientoproncrc , fig.cap="Raíz del Error Cuadratico Medio de los Modelos Lineales según set de datos (entrenamiento y prueba) para la serie de los saldos del Activo Neto Administrado de los Fondos de Inversión del Mercado de Dinero en Colones"}
 
-pronostico_CRC_1 <-window(series(modelseas1,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
-pronostico_CRC_2 <-window(series(modelseas2,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
-pronostico_CRC_3 <-window(series(modelseas3,"forecast.forecasts"),start=inicio_test,end=c(2021,7))				
-pronostico_CRC_1_train  <- final(modelseas1)			
-pronostico_CRC_2_train  <- final(modelseas2)					
-pronostico_CRC_3_train  <- final(modelseas3)		
-				
-perfor_crc_train_mod_1 <- getPerformance(pronostico_CRC_1_train, sactnetcrc_train)
-perfor_crc_train_mod_2 <- getPerformance(pronostico_CRC_2_train, sactnetcrc_train)
-perfor_crc_train_mod_3 <- getPerformance(pronostico_CRC_3_train, sactnetcrc_train)
+#### PRONOSTICO SOBRE LOS DATOS DE VALIDACION
+pronostico_CRC_1 <-
+  window(
+    series(modelseas1, "forecast.forecasts"),
+    start = inicio_test,
+    end = c(2021, 7)
+  )
+pronostico_CRC_2 <-
+  window(
+    series(modelseas2, "forecast.forecasts"),
+    start = inicio_test,
+    end = c(2021, 7)
+  )
+pronostico_CRC_3 <-
+  window(
+    series(modelseas3, "forecast.forecasts"),
+    start = inicio_test,
+    end = c(2021, 7)
+  )
+
+## PRONOSTICO SOBRE ENTRENAMIENTO
+pronostico_CRC_1_train  <- final(modelseas1)
+pronostico_CRC_2_train  <- final(modelseas2)
+pronostico_CRC_3_train  <- final(modelseas3)
+```
+
+```{r}
+
+### METRICAS DE RENDIMIENTO ARIMA
+
+## ENTRENAMIENTO
+
+perfor_crc_train_mod_1 <-
+  getPerformance(pronostico_CRC_1_train, sactnetcrc_train)
+perfor_crc_train_mod_2 <-
+  getPerformance(pronostico_CRC_2_train, sactnetcrc_train)
+perfor_crc_train_mod_3 <-
+  getPerformance(pronostico_CRC_3_train, sactnetcrc_train)
+
+### VALIDACION
+### 
+perfor_crc_test_mod_1 <-
+  getPerformance(pronostico_CRC_1[, 1], sactnetcrc_test)
+perfor_crc_test_mod_2 <-
+  getPerformance(pronostico_CRC_2[, 1], sactnetcrc_test)
+perfor_crc_test_mod_3 <-
+  getPerformance(pronostico_CRC_3[, 1], sactnetcrc_test)
 
 
-perfor_crc_test_mod_1 <- getPerformance(pronostico_CRC_1[,1],sactnetcrc_test)
-perfor_crc_test_mod_2 <- getPerformance(pronostico_CRC_2[,1],sactnetcrc_test)
-perfor_crc_test_mod_3 <- getPerformance(pronostico_CRC_3[,1],sactnetcrc_test)
+### TABLA DE METRICAS
 
+## ENTRENAMIENTO (AIC,BIC)
+
+data.frame(
+  Models=c(
+      "1. ARIMA (0 1 0)(1 0 1) Log",
+      "2. ARIMA (0 1 0)(0 1 1) Niveles",
+      "3. ARIMA (2 1 0)(1 0 0) Log"
+    ),
+AIC=c(AIC(modelseas1),AIC(modelseas2),AIC(modelseas3)),
+BIC=c(BIC(modelseas1),BIC(modelseas2),BIC(modelseas3))
+)%>%
+  arrange(AIC)%>%
+  knitr::kable(caption="Medidas de Ajuste: ARIMA Entrenamiento")
+
+## VALIDACION Y ENTRENAMIENTO
 
 Metricas_Sarima_CRC <- data.frame(
-Modelo = rep(
-c(
-"1. ARIMA (0 1 0)(1 0 1) Log",
-"2. ARIMA (0 1 0)(0 1 1) Niveles",
-"3. ARIMA (2 1 0)(1 0 0) Log"
-),
-2
-),
-Dataset = c(rep("Entrenamiento", 3), rep("Prueba", 3)),
-rbind(
-perfor_crc_train_mod_1,
-perfor_crc_train_mod_2,
-perfor_crc_train_mod_3,
-perfor_crc_test_mod_1,
-perfor_crc_test_mod_2,
-perfor_crc_test_mod_3
-)
+  Modelo = rep(
+    c(
+      "1. ARIMA (0 1 0)(1 0 1) Log",
+      "2. ARIMA (0 1 0)(0 1 1) Niveles",
+      "3. ARIMA (2 1 0)(1 0 0) Log"
+    ),
+    2
+  ),
+  Dataset = c(rep("Entrenamiento", 3), rep("Prueba", 3)),
+  rbind(
+    perfor_crc_train_mod_1,
+    perfor_crc_train_mod_2,
+    perfor_crc_train_mod_3,
+    perfor_crc_test_mod_1,
+    perfor_crc_test_mod_2,
+    perfor_crc_test_mod_3
+  )
 )
 
-Metricas_Mod_Lin<- bind_rows(Metricas_HW,Metricas_Sarima_CRC)
-#Metricas_Mod_Lin<- Metricas_Sarima_CRC
+#Metricas_Mod_Lin <- bind_rows(Metricas_HW, Metricas_Sarima_CRC)
+Metricas_Mod_Lin<- Metricas_Sarima_CRC
 
 knitr::kable(Metricas_Mod_Lin)
 
-ggplot(Metricas_Mod_Lin) +
-  aes(x = Modelo, fill = Dataset, weight = RMSE) +
-  geom_bar() +
-  scale_fill_manual(values = c(Entrenamiento = "#E69999",
-                               Prueba = "#5C7FA7")) +
-  labs(x = "Método", y = "RMSE") +
-  coord_flip() +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+# ggplot(Metricas_Mod_Lin) +
+#   aes(x = Modelo, fill = Dataset, weight = RMSE) +
+#   geom_bar() +
+#   scale_fill_manual(values = c(Entrenamiento = "#E69999",
+#                                Prueba = "#5C7FA7")) +
+#   labs(x = "Método", y = "RMSE") +
+#   coord_flip() +
+#   theme_minimal() +
+#   theme(legend.position = "none") +
+#   facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+```
+
+
+**Métricas de Rendimiento Modelos Lineales**
+
+```{r}
+
+rbind(Metricas_Sarima_CRC,
+MetResHW)%>%
+  arrange(Dataset,MAE)%>%
+  knitr::kable(caption="Metricas de Rendimiento sobre la muestra de prueba")
+
 
 ```
 
@@ -606,44 +726,100 @@ ggplot(Metricas_Mod_Lin) +
 #   theme_bw()
 
 ### Arima (2,1,0) (1,0,1) Log
-modelseas2_all<-seas(
-x = sactnetcrc_train,
-transform.function = "none",
-regression.aictest = NULL,
-outlier = NULL,
-regression.variables = "ao2020.Mar",
-arima.model = "(0 1 0)(0 1 1)"
+modelseas2_all <- seas(
+  x = sactnetcrc,
+  transform.function = "none",
+  regression.aictest = NULL,
+  outlier = NULL,
+  regression.variables = "ao2020.Mar",
+  arima.model = "(0 1 0)(0 1 1)"
 )
 
+pronostico_lin <- window(
+    series(modelseas2_all, "forecast.forecasts"),
+    start = c(2021, 8),
+    end = c(2021, 12)
+  )
 
-autoplot(sactnetcrc)+
-  autolayer(window(series(modelseas2_all,"forecast.forecasts"),start=c(2021,8),end=c(2021,12)))+
+autoplot(sactnetcrc) +
+  autolayer(pronostico_lin) +
   theme_bw()
-
-
 ```
+
 
 
 #### Serie en Dolares
 
-```{r holt winter usd modelos, results = FALSE}
+**Hold-Winter**
+
+**Holt Winter Multiplicativo**
+
+```{r}
 ht2_multi_usd <- hw(sactnetusd_train,seasonal="multiplicative",h = h.param)
-ht2_add_usd <- hw(sactnetusd_train,seasonal="additive",h = h.param)
 
 summary(ht2_multi_usd)
+
+pred_ht2_multi_usd <- ht2_multi_usd$mean
+
+checkresiduals(ht2_multi_usd)
+```
+
+**Holt Winter Aditivo**
+
+
+```{r holt winter usd modelos, results = FALSE}
+
+ht2_add_usd <- hw(sactnetusd_train,seasonal="additive",h = h.param)
+
 summary(ht2_add_usd)
 
+pred_ht2_add_usd <- ht2_add_usd$mean
+
+checkresiduals(ht2_add_usd)
 ```
+
+**METRICAS HOLT WINTER**
 
 ```{r holt winter usd rendimiento, results = FALSE}
-Metricas_HW_usd<-data.frame(
-      Modelo=c(rep("Holt Winter Multiplicativo",2),rep("Holt Winter Aditivo",2)),
-      Dataset= rep(c("Entrenamiento","Prueba"),2),
-      rbind(h2multi=forecast::accuracy(ht2_multi_usd,sactnetusd_test),h2aditive=forecast::accuracy(ht2_add_usd,sactnetusd_test)))%>%
-  select(Modelo,Dataset,RMSE,MAE)%>%
-  mutate(MSE=(RMSE)^2)
+perf_ht2_add_train_usd<-getPerformance(ht2_add_usd$model$fitted,sactnetusd_train)
+perf_ht2_multi_train_usd<-getPerformance(ht2_multi_usd$model$fitted,sactnetusd_train)
+
+perf_ht2_add_usd<-getPerformance(pred_ht2_add_usd, sactnetusd_test)
+perf_ht2_multi_usd<-getPerformance(pred_ht2_multi_usd, sactnetusd_test)
+
+data.frame(
+  Modelo = c("Holt Winter Aditivia",
+             "Holt Winter Multiplicativa"),
+  AIC = c(ht2_add_usd$model$aic,
+          ht2_multi_usd$model$aic),
+  AICc= c(ht2_add_usd$model$aicc,
+          ht2_multi_usd$model$aicc),
+  BIC = c(ht2_add_usd$model$bic,
+          ht2_multi_usd$model$bic))%>%
+  arrange(AIC)%>%
+  knitr::kable(caption="Metricas de Bondad de Ajuste")
+
+MetResHW_usd<-cbind(
+  Modelo = c("Holt Winter Aditivia",
+             "Holt Winter Multiplicativa",
+             "Holt Winter Aditivia",
+             "Holt Winter Multiplicativa"),
+  Dataset=c("Entrenamiento","Entrenamiento","Prueba","Prueba"),
+  rbind(
+    perf_ht2_add_train_usd,
+    perf_ht2_multi_train_usd,
+    perf_ht2_add_usd, 
+    perf_ht2_multi_usd
+        )
+) %>%
+  arrange(RMSE)
+
+MetResHW_usd%>%
+  knitr::kable(caption="Metricas de Ajuste sobre la tabla de validación")
 
 ```
+
+**ARIMA**
 
 ```{r arima usd seas model, eval=T, echo=F}
 ## x13 ARIMA SEAS
@@ -680,15 +856,20 @@ arima.model = "(0 1 1)(0 1 1)"
 
 
 
-# summary(modelseas1) 
+summary(modelseas1) 
 summary(modelseas2) 
-# summary(modelseas3) 
+summary(modelseas3) 
 
+```
+
+**Análisis de Supuestos**
+
+```{r}
 resseas1_usd<-resid(modelseas1_usd)
 resseas2_usd<-resid(modelseas2_usd)
 resseas3_usd<-resid(modelseas3_usd)
-
 ```
+
 
 ```{r arima usd residuos estacionariedad}
 
@@ -701,9 +882,9 @@ adf_res_usd_2<- adf.test(resseas2_usd , alternative='stationary')
 adf_res_usd_3<- adf.test(resseas3_usd , alternative='stationary')
 
 
-# adf_res_usd_1
+adf_res_usd_1
 adf_res_usd_2
-# adf_res_usd_3
+adf_res_usd_3
 ```
 
 ```{r arima usd residuos autocorrelacion}
@@ -715,9 +896,9 @@ adf_res_usd_2
 # H0: Independencia de los residuos
 # H1: No Independencia de los residuos
 
-# lb_res_usd_1 <- checkresiduals(modelseas1_usd , lag=MaxLag2)
+lb_res_usd_1 <- checkresiduals(modelseas1_usd , lag=MaxLag2)
 lb_res_usd_2 <- checkresiduals(modelseas2_usd , lag=MaxLag2)
-# lb_res_usd_3 <- checkresiduals(modelseas3_usd , lag=MaxLag2)
+lb_res_usd_3 <- checkresiduals(modelseas3_usd , lag=MaxLag2)
 
 ```
 
@@ -735,21 +916,21 @@ jb_res_usd_2<-jarque.bera.test(resseas2_usd) # Cumple
 jb_res_usd_3<-jarque.bera.test(resseas3_usd) # Cumple
 
 
-# jb_res_usd_1
+jb_res_usd_1
 jb_res_usd_2
-# jb_res_usd_3
+jb_res_usd_3
 
 sw_res_usd_1<-shapiro.test(resseas1_usd) # Cumple
 sw_res_usd_2<-shapiro.test(resseas2_usd) # Cumple
 sw_res_usd_3<-shapiro.test(resseas3_usd) # Cumple
 
-# sw_res_usd_1
+sw_res_usd_1
 sw_res_usd_2
-# sw_res_usd_3
+sw_res_usd_3
 
-# car::qqPlot(resseas1_usd)
+car::qqPlot(resseas1_usd)
 car::qqPlot(resseas2_usd)
-# car::qqPlot(resseas3_usd)
+car::qqPlot(resseas3_usd)
 
 ```
 
@@ -759,20 +940,22 @@ car::qqPlot(resseas2_usd)
 # H0: los residuos son homocedasticos
 # H1: los residuos no son homocedasticos
 
-# FinTS::ArchTest(resseas1_usd,lag=12)
-# FinTS::ArchTest(resseas2_usd,lag=12)
+FinTS::ArchTest(resseas1_usd,lag=12)
+FinTS::ArchTest(resseas2_usd,lag=12)
 FinTS::ArchTest(resseas3_usd,lag=12)
 
-# autoplot(resseas1_usd^2 )+ theme_bw(); acf2(resseas1_usd^2, max.lag=MaxLag2)
+autoplot(resseas1_usd^2 )+ theme_bw(); acf2(resseas1_usd^2, max.lag=MaxLag2)
 autoplot(resseas2_usd^2 )+ theme_bw(); acf2(resseas2_usd^2, max.lag=MaxLag2)
-# autoplot(resseas3_usd^2 )+ theme_bw(); acf2(resseas3_usd^2, max.lag=MaxLag2)
+autoplot(resseas3_usd^2 )+ theme_bw(); acf2(resseas3_usd^2, max.lag=MaxLag2)
 ```
+
 
 ```{r arima usd rendimiento}
 
 ### Performance de los modelos
 
 pronostico_usd_1 <- window(series(modelseas1_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
+
 pronostico_usd_2 <- window(series(modelseas2_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
 pronostico_usd_3 <- window(series(modelseas3_usd,"forecast.forecasts"),start=inicio_test,end=c(2021,7))		
 
@@ -780,6 +963,9 @@ pronostico_usd_1_train  <- final(modelseas1_usd)
 pronostico_usd_2_train  <- final(modelseas2_usd)					
 pronostico_usd_3_train  <- final(modelseas3_usd)		
 				
+```
+
+```{r}
 perfor_usd_train_mod_1 <- getPerformance(pronostico_usd_1_train, sactnetusd_train)
 perfor_usd_train_mod_2 <- getPerformance(pronostico_usd_2_train, sactnetusd_train)
 perfor_usd_train_mod_3 <- getPerformance(pronostico_usd_3_train, sactnetusd_train)
@@ -789,6 +975,21 @@ perfor_usd_test_mod_1 <- getPerformance(pronostico_usd_1[,1],sactnetusd_test)
 perfor_usd_test_mod_2 <- getPerformance(pronostico_usd_2[,1],sactnetusd_test)
 perfor_usd_test_mod_3 <- getPerformance(pronostico_usd_3[,1],sactnetusd_test)
 
+```
+
+
+```{r}
+data.frame(
+  Models=c(
+      "1. ARIMA (0 1 0)(1 0 1) Log",
+      "2. ARIMA (0 1 0)(0 1 1) Niveles",
+      "3. ARIMA (2 1 0)(1 0 0) Log"
+    ),
+AIC=c(AIC(modelseas1_usd),AIC(modelseas2_usd),AIC(modelseas3_usd)),
+BIC=c(BIC(modelseas1_usd),BIC(modelseas2_usd),BIC(modelseas3_usd))
+)%>%
+  arrange(AIC)%>%
+  knitr::kable(caption="Medidas de Ajuste: ARIMA Entrenamiento")
 
 Metricas_Sarima_usd <- data.frame(
 Modelo = rep(
@@ -810,19 +1011,23 @@ perfor_usd_test_mod_3
 )
 )
 
-Metricas_Mod_Lin<- bind_rows(Metricas_HW_usd,Metricas_Sarima_usd)
-#Metricas_Mod_Lin<- Metricas_Sarima_usd
+#Metricas_Mod_Lin<- bind_rows(Metricas_HW_usd,Metricas_Sarima_usd)
+Metricas_Mod_Lin<- Metricas_Sarima_usd
 
-ggplot(Metricas_Mod_Lin) +
-  aes(x = Modelo, fill = Dataset, weight = RMSE) +
-  geom_bar() +
-  scale_fill_manual(values = c(Entrenamiento = "#E69999",
-                               Prueba = "#5C7FA7")) +
-  labs(x = "Método", y = "RMSE", title = "Colones") +
-  coord_flip() +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  facet_wrap(vars(Dataset), scales = "free", ncol = 1L)
+Metricas_Mod_Lin%>%
+  knitr::kable()
+
+```
+
+**Métricas de Rendimiento Modelos Lineales**
+
+```{r}
+
+rbind(Metricas_Sarima_usd,
+MetResHW_usd)%>%
+  arrange(Dataset,MAE)%>%
+  knitr::kable(caption="Metricas de Rendimiento sobre la muestra de prueba")
+
 
 ```
 
@@ -832,7 +1037,6 @@ ggplot(Metricas_Mod_Lin) +
 # autoplot(ht2_multi_all)+
 #   theme_bw()
 
-### Arima (2,1,0) (1,0,1) Log
 modelseas2_all<-seas(
 x = sactnetusd,
 transform.function = "log",
@@ -854,11 +1058,14 @@ autoplot(sactnetusd)+
 #### Serie en Colones
 ##### TAR
 
-```{r, include=F}
-rm(list=ls()[!ls() %in% c('actnetcrc','actnetusd','actnet',"fin_train","inicio_test","inicio_train","sactnetcrc","sactnetcrc_test","sactnetcrc_train","sactnetusd","sactnetusd_test","sactnetusd_train")])
+```{r, include=F, eval=F}
+rm(list=ls()[!ls() %in% c('actnetcrc','actnetusd','actnet',"fin_train","inicio_test","inicio_train","sactnetcrc","sactnetcrc_test","sactnetcrc_train","sactnetusd","sactnetusd_test","sactnetusd_train","Metricas_Sarima_usd","Metricas_Sarima","MetResHW_usd","MetResHW_usd")])
+
 ```
 
-```{r ,eval=F}
+**Definir Parametros modelo TAR**
+
+```{r ,eval=T}
 
 # m orden
 pm <- 1:3
@@ -868,7 +1075,7 @@ AIC.best.list<-list()
 
 AICM = NULL
 model.best <- list(d=0, p1=0, p2=0)
-AIC.best = 2888
+AIC.best = 2964
 
 for(l in pm){
   for(j in pm){
@@ -876,7 +1083,7 @@ for(l in pm){
       set.seed(777)
       model.tar.s = tar(sactnetcrc_train,p1=j,p2=i,d=l)
       mod.list.tar[[paste(j,i,l,sep="-")]]<-model.tar.s$AIC
-      #print(paste(j,i,l,sep="-"))    
+      #print(paste(j,i,l,model.tar.s$AIC,sep="-"))    
       
       if (model.tar.s$AIC < AIC.best) {
 		    AIC.best = model.tar.s$AIC
@@ -902,10 +1109,12 @@ knitr::kable(head(AICTarBest,20))
 
 ```
 
+**Los tres mejores modelos**
+
 ```{r}
-mod.tar1<-TSA::tar(sactnetcrc_train,p1=2,p2=3,d=1)  
-mod.tar2<-TSA::tar(sactnetcrc_train,p1=3,p2=1,d=1)  
-mod.tar3<-TSA::tar(sactnetcrc_train,p1=3,p2=2,d=1)  
+mod.tar1<-TSA::tar(sactnetcrc_train,p1=3,p2=2,d=1)  
+mod.tar2<-TSA::tar(sactnetcrc_train,p1=3,p2=1,d=2)  
+mod.tar3<-TSA::tar(sactnetcrc_train,p1=3,p2=3,d=1)  
 
 mod.tar1$thd
 mod.tar2$thd
@@ -920,9 +1129,9 @@ mod.tar2$qr2$coefficients
 mod.tar3$qr2$coefficients
 
 cbind(
-Modelo=c("p1=2,p2=3,d=1",
-         "p1=3,p2=1,d=1",
-         "p1=3,p2=2,d=1"),
+Modelo=c("1.TAR p1=3,p2=2,d=1",
+         "2.TAR p1=3,p2=1,d=2",
+         "3.TAR p1=3,p2=3,d=1"),
 AIC=c(mod.tar1$AIC,
 mod.tar2$AIC,
 mod.tar3$AIC))%>%
@@ -934,30 +1143,52 @@ tsdiag(mod.tar2)
 #tsdiag(mod.tar3)
 
 
-checkresiduals(ts(mod.tar1$residuals,start=c(2011,1),frequency = 12))
-checkresiduals(ts(mod.tar2$residuals,start=c(2011,1),frequency = 12))
-checkresiduals(ts(mod.tar3$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar1$residuals,start=inicio_train,frequency = 12))
+checkresiduals(ts(mod.tar2$residuals,start=inicio_train,frequency = 12))
+checkresiduals(ts(mod.tar3$residuals,start=inicio_train,frequency = 12))
 ```
 
 
 ```{r}
-prontar1<- ts(as.vector(predict(mod.tar1,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
-prontar2<- ts(as.vector(predict(mod.tar2,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
-prontar3<- ts(as.vector(predict(mod.tar3,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
+prontar1<- ts(as.vector(predict(mod.tar1,n.ahead=h.param,n.sim=1000)$fit),start=inicio_test,frequency = 12)
+prontar2<- ts(as.vector(predict(mod.tar2,n.ahead=h.param,n.sim=1000)$fit),start=inicio_test,frequency = 12)
+prontar3<- ts(as.vector(predict(mod.tar3,n.ahead=h.param,n.sim=1000)$fit),start=inicio_test,frequency = 12)
 
-fit1<-ts(as.vector(mod.tar1$y)-as.vector(mod.tar1$residuals),start =c(2011,1),frequency = 12)
-fit2<-ts(sactnetcrc_train-mod.tar2$residuals,start =c(2011,1),frequency = 12)
-fit3<-ts(sactnetcrc_train-mod.tar3$residuals,start =c(2011,1),frequency = 12)
+fit1<-ts(as.vector(mod.tar1$y)-as.vector(mod.tar1$residuals),start =inicio_train,frequency = 12)
+fit2<-ts(sactnetcrc_train-mod.tar2$residuals,start =inicio_train,frequency = 12)
+fit3<-ts(sactnetcrc_train-mod.tar3$residuals,start =inicio_train,frequency = 12)
 
+```
+
+
+```{r}
+MetricasTARCRC<-data.frame(
+  Modelo=rep(c("1.TAR p1=3,p2=2,d=1",
+         "2.TAR p1=3,p2=1,d=2",
+         "3.TAR p1=3,p2=3,d=1"),2),
+DataSet= c(rep("Entrenamiento",3),rep("Prueba",3)),
+
+rbind(getPerformance(fit1,sactnetcrc_train),
+getPerformance(fit2,sactnetcrc_train),
+getPerformance(fit3,sactnetcrc_train),
+
+getPerformance(prontar1,sactnetcrc_test),
+getPerformance(prontar2,sactnetcrc_test),
+getPerformance(prontar3,sactnetcrc_test)))%>%
+  arrange(DataSet,RMSE)
+
+MetricasTARCRC%>%
+  knitr::kable(caption="Metricas de Rendimiento Modelos TAR")
+
+```
+
+
+```{r}
 autoplot(sactnetcrc_train)+
   autolayer(fit1)+
   autolayer(fit2)+
   autolayer(fit3)+
   theme_bw()
-
-Metrics::rmse(sactnetcrc_test, prontar1)
-Metrics::rmse(sactnetcrc_test, prontar2)
-Metrics::rmse(sactnetcrc_test, prontar3)
 
 autoplot(sactnetcrc_test)+
   autolayer(prontar1)+
@@ -1065,7 +1296,7 @@ modeloas1 <-
 ## Raiz Unitaria
 summary(modeloas1) #residuals variance = 0.005525,  AIC = -632, MAPE = 0.4352%
 # plot(modeloas1)
-checkresiduals(ts(modeloas1$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(modeloas1$residuals,start=inicio_train,frequency = 12))
 
 modeloas2 <-
   setar(
@@ -1081,7 +1312,7 @@ modeloas2 <-
 ## Raiz Unitaria
 summary(modeloas2) # residuals variance = 0.005857,  AIC = -635, MAPE = 0.4584%
 # plot(modeloas2)
-checkresiduals(ts(modeloas2$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(modeloas2$residuals,start=inicio_train,frequency = 12))
 
 modeloas3 <-
   setar(
@@ -1097,7 +1328,7 @@ modeloas3 <-
 ## Raiz Unitaria
 summary(modeloas3) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
 # plot(modeloas3)
-checkresiduals(ts(modeloas3$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(modeloas3$residuals,start=inicio_train,frequency = 12))
 
 modeloas4 <-
   setar(
@@ -1112,47 +1343,84 @@ modeloas4 <-
   )
 summary(modeloas4) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.4621%
 # plot(modeloas4)
-checkresiduals(ts(modeloas4$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(modeloas4$residuals,start=inicio_train,frequency = 12))
 
 
-AIC(modeloas1)
-AIC(modeloas2)
-AIC(modeloas3)
-AIC(modeloas4)
+
 ```
 
 ```{r}
-pronsetar1<- predict(modeloas1, n.ahead = 7)
-pronsetar2<- predict(modeloas2, n.ahead = 7)
-pronsetar3<- predict(modeloas3, n.ahead = 7)
-pronsetar4<- predict(modeloas4, n.ahead = 7)
+cbind(
+Modelo=c("1.SETAR m = 3,mL = 3, mH = 1, d=1,nthresh = 1,thDelay = 2",
+         "2.SETAR m = 3,mL = 2, mH = 3, d=2,nthresh = 1,thDelay = 2",
+         "3.SETAR m = 3,mL = 3, mH = 2, d=1,nthresh = 1,thDelay = 0",
+         "4.SETAR m = 3,mL = 1, mH = 2, d=2,nthresh = 1,thDelay = 0"),
+AIC=c(
+  AIC(modeloas1),
+  AIC(modeloas2),
+  AIC(modeloas3),
+  AIC(modeloas4)
+  
+),
+BIC=c(
+  BIC(modeloas1),
+  BIC(modeloas2),
+  BIC(modeloas3),
+  BIC(modeloas4)
+  
+)
+)%>%
+  knitr::kable()
+```
 
-fit1<-ts(modeloas1$fitted.values,start =c(2011,1),frequency = 12)
-fit2<-ts(modeloas2$fitted.values,start =c(2011,1),frequency = 12)
-fit3<-ts(modeloas3$fitted.values,start =c(2011,1),frequency = 12)
-fit4<-ts(modeloas4$fitted.values,start =c(2011,1),frequency = 12)
 
+```{r}
+pronsetar1<- predict(modeloas1, n.ahead = h.param)
+pronsetar2<- predict(modeloas2, n.ahead = h.param)
+pronsetar3<- predict(modeloas3, n.ahead = h.param)
+pronsetar4<- predict(modeloas4, n.ahead = h.param)
+
+fit1<-ts(modeloas1$fitted.values,start =inicio_train,frequency = 12)
+fit2<-ts(modeloas2$fitted.values,start =inicio_train,frequency = 12)
+fit3<-ts(modeloas3$fitted.values,start =inicio_train,frequency = 12)
+fit4<-ts(modeloas4$fitted.values,start =inicio_train,frequency = 12)
+```
+
+```{r}
+MetricasSETARCRC<-data.frame(
+  Modelo=rep(c(
+         "1.SETAR m = 3,mL = 3, mH = 1, d=1,nthresh = 1,thDelay = 2",
+         "2.SETAR m = 3,mL = 2, mH = 3, d=2,nthresh = 1,thDelay = 2",
+         "3.SETAR m = 3,mL = 3, mH = 2, d=1,nthresh = 1,thDelay = 0",
+         "4.SETAR m = 3,mL = 1, mH = 2, d=2,nthresh = 1,thDelay = 0"),2),
+DataSet= c(rep("Entrenamiento",4),rep("Prueba",4)),
+
+rbind(
+  getPerformance(fit1,sactnetcrc_train),
+  getPerformance(fit2,sactnetcrc_train),
+  getPerformance(fit3,sactnetcrc_train),
+  getPerformance(fit4,sactnetcrc_train),
+
+  getPerformance(pronsetar1,sactnetcrc_test),
+  getPerformance(pronsetar2,sactnetcrc_test),
+  getPerformance(pronsetar3,sactnetcrc_test),
+  getPerformance(pronsetar4,sactnetcrc_test)
+  ))%>%
+  arrange(DataSet,RMSE)
+
+MetricasSETARCRC%>%
+  knitr::kable(caption="Metricas de Rendimiento Modelos SETAR")
+
+```
+
+
+```{r}
 autoplot(sactnetcrc_train)+
   autolayer(fit1)+
   autolayer(fit2)+
   autolayer(fit3)+
   autolayer(fit4)+
   theme_bw()
-
-data.frame(
-Modelo= c(
-  "1) m = 3,mL = 3,mH = 1, d=1",
-  "2) m = 3,mL = 2,mH = 3, d=2",
-  "3) m = 3,mL = 3,mH = 2, d=1",
-  "4) m = 3,mL = 1,mH = 2, d=2"
-),
-RMSE=c(
-  Metrics::rmse(sactnetcrc_test, pronsetar1),
-  Metrics::rmse(sactnetcrc_test, pronsetar2),
-  Metrics::rmse(sactnetcrc_test, pronsetar3),
-  Metrics::rmse(sactnetcrc_test, pronsetar4)))%>%
-  arrange(RMSE)%>%
-  knitr::kable()
 
 autoplot(sactnetcrc_test)+
   autolayer(pronsetar1)+
@@ -1166,11 +1434,15 @@ autoplot(sactnetcrc_test)+
 ##### Metricas Generales
 
 ```{r , eval=T}
-Metrics::rmse(sactnetcrc_test,(prontar2))
-Metrics::rmse(sactnetcrc_test, (pronsetar4))
+rbind(MetricasTARCRC,
+MetricasSETARCRC)%>%
+  arrange(DataSet,RMSE)%>%
+  knitr::kable(caption="Metricas de Rendimiento Modelos No Lineales Colones")
 
 autoplot(sactnetcrc_test)+
-  autolayer(prontar2)+
+  autolayer(prontar3)+
+  autolayer(pronsetar1)+
+  autolayer(prontar1)+
   autolayer(pronsetar4)+
   theme_bw()+
   scale_y_continuous(limits = c(500000,1400000))
@@ -1179,7 +1451,7 @@ autoplot(sactnetcrc_test)+
 #### Serie en Dolares
 ##### TAR
 
-```{r ,eval=F}
+```{r ,eval=T}
 # m orden
 pm <- 1:4
 
@@ -1239,9 +1511,9 @@ mod.tar2.usd$qr2$coefficients
 mod.tar3.usd$qr2$coefficients
 
 data.frame(
-Modelo=c("p1=3,p2=4,d=1",
-         "p1=1,p2=2,d=1",
-         "p1=1,p2=3,d=1"),
+Modelo=c("1. TAR p1=3,p2=4,d=1",
+         "2. TAR p1=1,p2=2,d=1",
+         "3. TAR p1=1,p2=3,d=1"),
 AIC=c(mod.tar1.usd$AIC,
 mod.tar2.usd$AIC,
 mod.tar3.usd$AIC))%>%
@@ -1254,39 +1526,51 @@ tsdiag(mod.tar2.usd)
 tsdiag(mod.tar3.usd)
 
 
-checkresiduals(ts(mod.tar1.usd$residuals,start=c(2011,1),frequency = 12))
-checkresiduals(ts(mod.tar2.usd$residuals,start=c(2011,1),frequency = 12))
-checkresiduals(ts(mod.tar3.usd$residuals,start=c(2011,1),frequency = 12))
+checkresiduals(ts(mod.tar1.usd$residuals,start=inicio_train,frequency = 12))
+checkresiduals(ts(mod.tar2.usd$residuals,start=inicio_train,frequency = 12))
+checkresiduals(ts(mod.tar3.usd$residuals,start=inicio_train,frequency = 12))
 ```
 
+```{r}
+prontar1.usd<- ts(as.vector(predict(mod.tar1.usd,n.ahead=h.param,n.sim=1000)$fit),start=inicio_test,frequency = 12)
+prontar2.usd<- ts(as.vector(predict(mod.tar2.usd,n.ahead=h.param,n.sim=1000)$fit),start=inicio_test,frequency = 12)
+prontar3.usd<- ts(as.vector(predict(mod.tar3.usd,n.ahead=h.param,n.sim=1000)$fit),start=inicio_test,frequency = 12)
+
+fit1.usd<-ts(as.vector(mod.tar1.usd$y)-as.vector(mod.tar1.usd$residuals),start =inicio_train,frequency = 12)
+fit2.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar2.usd$residuals,start =inicio_train,frequency = 12)
+fit3.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar3.usd$residuals,start =inicio_train,frequency = 12)
+
+
+```
 
 ```{r}
-prontar1.usd<- ts(as.vector(predict(mod.tar1.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
-prontar2.usd<- ts(as.vector(predict(mod.tar2.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
-prontar3.usd<- ts(as.vector(predict(mod.tar3.usd,n.ahead=7,n.sim=1000)$fit),start=c(2021,1),frequency = 12)
 
-fit1.usd<-ts(as.vector(mod.tar1.usd$y)-as.vector(mod.tar1.usd$residuals),start =c(2011,1),frequency = 12)
-fit2.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar2.usd$residuals,start =c(2011,1),frequency = 12)
-fit3.usd<-ts(as.vector(mod.tar1.usd$y)-mod.tar3.usd$residuals,start =c(2011,1),frequency = 12)
+MetricasTARUSD<-data.frame(
+  Modelo=rep(c("1. TAR p1=3,p2=4,d=1",
+         "2. TAR p1=1,p2=2,d=1",
+         "3. TAR p1=1,p2=3,d=1"),2),
+DataSet= c(rep("Entrenamiento",3),rep("Prueba",3)),
 
+rbind(getPerformance(fit1.usd,sactnetusd_train),
+getPerformance(fit2.usd,sactnetusd_train),
+getPerformance(fit3.usd,sactnetusd_train),
+
+getPerformance(prontar1.usd,sactnetusd_test),
+getPerformance(prontar2.usd,sactnetusd_test),
+getPerformance(prontar3.usd,sactnetusd_test)))%>%
+  arrange(DataSet,RMSE)
+
+MetricasTARUSD%>%
+  knitr::kable(caption="Metricas de Rendimiento Modelos TAR USD")
+
+```
+
+```{r}
 autoplot(sactnetusd_train)+
   autolayer(fit1.usd)+
   autolayer(fit2.usd)+
   autolayer(fit3.usd)+
   theme_bw()
-
-data.frame(
-Modelo=c("p1=3,p2=4,d=1",
-         "p1=1,p2=2,d=1",
-         "p1=1,p2=3,d=1"),
-RMSE=c(
-  Metrics::rmse(sactnetusd_test, prontar1.usd),
-  Metrics::rmse(sactnetusd_test, prontar2.usd),
-  Metrics::rmse(sactnetusd_test, prontar3.usd)))%>%
-  arrange(RMSE)%>%
-  knitr::kable()
-
-
 
 autoplot(sactnetusd_test)+
   autolayer(prontar1.usd)+
@@ -1381,7 +1665,7 @@ modeloas1.usd <-
   setar(
     sactnetusd_train,
     mL = 1,
-    mH = 3,
+    mH = 1,
     d=1,
     nthresh = 1,
     thDelay = 2,
@@ -1395,8 +1679,8 @@ checkresiduals(ts(modeloas1.usd$residuals,start=c(2011,1),frequency = 12))
 modeloas2.usd <-
   setar(
     sactnetusd_train,
-    mL = 3,
-    mH = 1,
+    mL = 1,
+    mH = 3,
     d=2,
     nthresh = 1,
     thDelay = 1,
@@ -1425,9 +1709,9 @@ checkresiduals(ts(modeloas3.usd$residuals,start=c(2011,1),frequency = 12))
 modeloas4.usd <-
   setar(
     sactnetusd_train,
-    m = 3,
+    m = 4,
     mL = 1,
-    mH = 2,
+    mH = 4,
     d=2,
     nthresh = 1,
     thDelay = 0,
@@ -1437,45 +1721,84 @@ summary(modeloas4.usd) # residuals variance = 0.006319,  AIC = -621, MAPE = 0.46
 # plot(modeloas4)
 checkresiduals(ts(modeloas4.usd$residuals,start=c(2011,1),frequency = 12))
 
-
-AIC(modeloas1.usd)
-AIC(modeloas2.usd)
-AIC(modeloas3.usd)
-AIC(modeloas4.usd)
 ```
 
+
 ```{r}
-pronsetar1.usd<- predict(modeloas1.usd, n.ahead = 7)
-pronsetar2.usd<- predict(modeloas2.usd, n.ahead = 7)
-pronsetar3.usd<- predict(modeloas3.usd, n.ahead = 7)
-pronsetar4.usd<- predict(modeloas4.usd, n.ahead = 7)
+cbind(
+Modelo=c("1.SETAR m = 4,mL = 1, mH = 1, d=1,nthresh = 1,thDelay = 2",
+         "2.SETAR m = 4,mL = 1, mH = 3, d=2,nthresh = 1,thDelay = 2",
+         "3.SETAR m = 4,mL = 1, mH = 1, d=1,nthresh = 1,thDelay = 1",
+         "4.SETAR m = 4,mL = 1, mH = 4, d=2,nthresh = 1,thDelay = 0"),
+AIC=c(
+  AIC(modeloas1),
+  AIC(modeloas2),
+  AIC(modeloas3),
+  AIC(modeloas4)
+  
+),
+BIC=c(
+  BIC(modeloas1),
+  BIC(modeloas2),
+  BIC(modeloas3),
+  BIC(modeloas4)
+  
+)
+)%>%
+  knitr::kable()
+```
 
-fit1.usd<-ts(modeloas1.usd$fitted.values,start =c(2011,1),frequency = 12)
-fit2.usd<-ts(modeloas2.usd$fitted.values,start =c(2011,1),frequency = 12)
-fit3.usd<-ts(modeloas3.usd$fitted.values,start =c(2011,1),frequency = 12)
-fit4.usd<-ts(modeloas4.usd$fitted.values,start =c(2011,1),frequency = 12)
 
+
+```{r}
+pronsetar1.usd<- predict(modeloas1.usd, n.ahead = h.param)
+pronsetar2.usd<- predict(modeloas2.usd, n.ahead = h.param)
+pronsetar3.usd<- predict(modeloas3.usd, n.ahead = h.param)
+pronsetar4.usd<- predict(modeloas4.usd, n.ahead = h.param)
+
+fit1.usd<-ts(modeloas1.usd$fitted.values,start =inicio_train,frequency = 12)
+fit2.usd<-ts(modeloas2.usd$fitted.values,start =inicio_train,frequency = 12)
+fit3.usd<-ts(modeloas3.usd$fitted.values,start =inicio_train,frequency = 12)
+fit4.usd<-ts(modeloas4.usd$fitted.values,start =inicio_train,frequency = 12)
+```
+
+
+```{r}
+
+MetricasSETARUSD<-data.frame(
+  Modelo=rep(
+    c("1.SETAR m = 4,mL = 1, mH = 1, d=1,nthresh = 1,thDelay = 2",
+      "2.SETAR m = 4,mL = 1, mH = 3, d=2,nthresh = 1,thDelay = 2",
+      "3.SETAR m = 4,mL = 1, mH = 1, d=1,nthresh = 1,thDelay = 1",
+      "4.SETAR m = 4,mL = 1, mH = 4, d=2,nthresh = 1,thDelay = 0"),2),
+DataSet= c(rep("Entrenamiento",4),rep("Prueba",4)),
+
+rbind(
+  getPerformance(fit1.usd,sactnetusd_train),
+  getPerformance(fit2.usd,sactnetusd_train),
+  getPerformance(fit3.usd,sactnetusd_train),
+  getPerformance(fit4.usd,sactnetusd_train),
+
+  getPerformance(pronsetar1.usd,sactnetusd_test),
+  getPerformance(pronsetar2.usd,sactnetusd_test),
+  getPerformance(pronsetar3.usd,sactnetusd_test),
+  getPerformance(pronsetar4.usd,sactnetusd_test)
+  ))%>%
+  arrange(DataSet,RMSE)
+
+MetricasSETARUSD%>%
+  knitr::kable(caption="Metricas de Rendimiento Modelos SETAR")
+
+```
+
+
+```{r}
 autoplot(sactnetusd_train)+
   autolayer(fit1.usd)+
   autolayer(fit2.usd)+
   autolayer(fit3.usd)+
   autolayer(fit4.usd)+
   theme_bw()
-
-data.frame(
-Modelo= c(
-  "1) m = 3,mL = 3,mH = 1, d=1",
-  "2) m = 3,mL = 2,mH = 3, d=2",
-  "3) m = 3,mL = 3,mH = 2, d=1",
-  "4) m = 3,mL = 1,mH = 2, d=2"
-),
-RMSE=c(
-  Metrics::rmse(sactnetusd_test, pronsetar1.usd),
-  Metrics::rmse(sactnetusd_test, pronsetar2.usd),
-  Metrics::rmse(sactnetusd_test, pronsetar3.usd),
-  Metrics::rmse(sactnetusd_test, pronsetar4.usd)))%>%
-  arrange(RMSE)%>%
-  knitr::kable()
 
 autoplot(sactnetusd_test)+
   autolayer(pronsetar1.usd)+
@@ -1488,13 +1811,16 @@ autoplot(sactnetusd_test)+
 ##### Metricas Generales
 
 ```{r , eval=T}
-Metrics::rmse(sactnetusd_test,prontar1.usd)
-Metrics::rmse(sactnetusd_test, pronsetar4.usd)
+
+rbind(MetricasTARUSD,
+MetricasSETARUSD)%>%
+  arrange(DataSet,RMSE)%>%
+  knitr::kable(caption="Metricas de Rendimiento Modelos No Lineales Dolares")
 
 
 autoplot(sactnetusd_test)+
   autolayer(prontar1.usd)+
-  autolayer(pronsetar4.usd)+
+  autolayer(pronsetar1.usd)+
   theme_bw()
 ```
 
@@ -1993,8 +2319,8 @@ full_data_tbl <- dolares%>%
 ```{r}
 data_prepared_tbl <- full_data_tbl[!is.na(full_data_tbl$value),]
   
-data_prepared_tbl%>%
-  tk_summary_diagnostics()
+# data_prepared_tbl%>%
+#   tk_summary_diagnostics()
 ```
 
 ###### Future Data Forecast
