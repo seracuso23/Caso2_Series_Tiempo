@@ -64,10 +64,10 @@
     },
     "MASS": {
       "Package": "MASS",
-      "Version": "7.3-54",
+      "Version": "7.3-55",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "0e59129db205112e3963904db67fd0dc",
+      "Hash": "c5232ffb549f6d7a04a152c34ca1353d",
       "Requirements": []
     },
     "MSwM": {
@@ -149,12 +149,22 @@
       "Hash": "e031418365a7f7a766181ab5a41a5716",
       "Requirements": []
     },
-    "Rcpp": {
-      "Package": "Rcpp",
-      "Version": "1.0.7",
+    "RCurl": {
+      "Package": "RCurl",
+      "Version": "1.98-1.5",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "dab19adae4440ae55aa8a9d238b246bb",
+      "Hash": "5cc50d9d40a284cb8b1c8604901acf89",
+      "Requirements": [
+        "bitops"
+      ]
+    },
+    "Rcpp": {
+      "Package": "Rcpp",
+      "Version": "1.0.8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "22b546dd7e337f6c0c58a39983a496bc",
       "Requirements": []
     },
     "RcppArmadillo": {
@@ -500,10 +510,10 @@
     },
     "class": {
       "Package": "class",
-      "Version": "7.3-19",
+      "Version": "7.3-20",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "1593b7beb067c8381c0d24e38bd778e0",
+      "Hash": "da09d82223e669d270e47ed24ac8686e",
       "Requirements": [
         "MASS"
       ]
@@ -840,10 +850,10 @@
     },
     "fansi": {
       "Package": "fansi",
-      "Version": "0.5.0",
+      "Version": "1.0.2",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "d447b40982c576a72b779f0a3b3da227",
+      "Hash": "f28149c2d7a1342a834b314e95e67260",
       "Requirements": []
     },
     "farver": {
@@ -888,10 +898,10 @@
     },
     "forecast": {
       "Package": "forecast",
-      "Version": "8.15",
+      "Version": "8.16",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "7fcbf90ac21b3afa783667f2896edac0",
+      "Hash": "5d2502b83f310c485c5ba62b6b0bbfb9",
       "Requirements": [
         "Rcpp",
         "RcppArmadillo",
@@ -909,10 +919,10 @@
     },
     "foreign": {
       "Package": "foreign",
-      "Version": "0.8-81",
+      "Version": "0.8-82",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "74628ea7a3be5ee8a7b5bb0a8e84882e",
+      "Hash": "32b25c97ce306a760c4d9f787991b5d9",
       "Requirements": []
     },
     "fracdiff": {
@@ -1153,6 +1163,17 @@
       "Repository": "CRAN",
       "Hash": "ac5c6baf7822ce8732b343f14c072c4d",
       "Requirements": []
+    },
+    "h2o": {
+      "Package": "h2o",
+      "Version": "3.36.0.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "3752744c2c54077a4fcdf043030dba15",
+      "Requirements": [
+        "RCurl",
+        "jsonlite"
+      ]
     },
     "hardhat": {
       "Package": "hardhat",
@@ -1644,15 +1665,10 @@
     },
     "modeltime": {
       "Package": "modeltime",
-      "Version": "1.1.0.9000",
-      "Source": "GitHub",
-      "RemoteType": "github",
-      "RemoteHost": "api.github.com",
-      "RemoteRepo": "modeltime",
-      "RemoteUsername": "business-science",
-      "RemoteRef": "HEAD",
-      "RemoteSha": "ff0158bed7e30a910cdb3b13e02f06bef10b2c24",
-      "Hash": "41098b6fe09a639f27e260b500177ff1",
+      "Version": "1.1.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "bc0c62f17aa5d7cc9fd0cd5fbd3a7b77",
       "Requirements": [
         "StanHeaders",
         "cli",
@@ -1720,6 +1736,28 @@
         "yardstick"
       ]
     },
+    "modeltime.h2o": {
+      "Package": "modeltime.h2o",
+      "Version": "0.1.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "817de1d01a6af6a9bfdff08d0bd390f1",
+      "Requirements": [
+        "dplyr",
+        "fs",
+        "glue",
+        "h2o",
+        "magrittr",
+        "modeltime",
+        "parsnip",
+        "purrr",
+        "rlang",
+        "stringr",
+        "tibble",
+        "tidyr",
+        "timetk"
+      ]
+    },
     "modeltime.resample": {
       "Package": "modeltime.resample",
       "Version": "0.2.0",
@@ -1770,10 +1808,10 @@
     },
     "nlme": {
       "Package": "nlme",
-      "Version": "3.1-153",
+      "Version": "3.1-155",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "2d632e0d963a653a0329756ce701ecdd",
+      "Hash": "74ad940dccc9e977189a5afe5fcdb7ba",
       "Requirements": [
         "lattice"
       ]
@@ -1788,10 +1826,10 @@
     },
     "nnet": {
       "Package": "nnet",
-      "Version": "7.3-16",
+      "Version": "7.3-17",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "3a3dc184000bc9e6c145c4dbde4dd702",
+      "Hash": "cb1d8d9f300a7e536b89c8a88c53f610",
       "Requirements": []
     },
     "nonlinearTseries": {
@@ -2302,10 +2340,10 @@
     },
     "renv": {
       "Package": "renv",
-      "Version": "0.15.0",
+      "Version": "0.15.1",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "36c1a644e5b0ba8050f40f07ea1dae62",
+      "Hash": "c38694b67e7f7091f7d073b3766258cc",
       "Requirements": []
     },
     "reprex": {
@@ -2573,10 +2611,10 @@
     },
     "spatial": {
       "Package": "spatial",
-      "Version": "7.3-14",
+      "Version": "7.3-15",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "a7341b0231ca84a0323982d5ae5a4300",
+      "Hash": "c23666fdb7789c8a45e65340bb334607",
       "Requirements": []
     },
     "stabledist": {
@@ -3038,22 +3076,6 @@
         "ellipsis",
         "glue",
         "rlang"
-      ]
-    },
-    "vembedr": {
-      "Package": "vembedr",
-      "Version": "0.1.5",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Hash": "a70fc1a38cb92dfb37402d3f920c351a",
-      "Requirements": [
-        "assertthat",
-        "glue",
-        "htmltools",
-        "httr",
-        "lifecycle",
-        "magrittr",
-        "stringr"
       ]
     },
     "viridisLite": {
