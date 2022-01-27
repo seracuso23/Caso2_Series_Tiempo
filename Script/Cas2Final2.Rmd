@@ -3287,6 +3287,7 @@ No Lineal & 3.SETAR m = 4,mL = 1, mH = 1, d=1,nthresh = 1,thDelay = 1 & 65.2 & 7
 ```
 # Prueba de Tensión
 
+
 ```{r datos pt}
 
 ##https://ricovictor.com/index.php/2021/10/01/teoria-de-valores-extremos-pareto-generalizada/
@@ -3298,10 +3299,6 @@ No Lineal & 3.SETAR m = 4,mL = 1, mH = 1, d=1,nthresh = 1,thDelay = 1 & 65.2 & 7
 actnetcrc_all <- ts(c(actnetcrc,pron_crc_ml_ensamble$Valor),frequency = 12,start = c(2001,2))
 
 actnetusd_all <- ts(c(actnetusd,pronostico_lin_usd[,1]),frequency = 12,start = c(2001,2))
-
-```
-
-```{r datos pt}
 
 r_actnetcrc_all <-na.omit(returns(actnetcrc_all))
 r_actnetusd_all <-na.omit(returns(actnetusd_all))
