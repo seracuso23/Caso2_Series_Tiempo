@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.23 (TeX Live 2022/dev) (preloaded format=pdflatex 2022.1.26)  26 JAN 2022 15:00
+This is pdfTeX, Version 3.141592653-2.6-1.40.23 (TeX Live 2022/dev) (preloaded format=pdflatex 2022.1.26)  26 JAN 2022 19:44
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -920,31 +920,65 @@ l.654
 l.654 
        <./Cas2Final2_files/figure-latex/USDEnsembleTestForecast-1.pdf> <./Cas2F
 inal2_files/figure-latex/USDvisualizacionmodeloml-1.pdf>]
-LaTeX Font Info:    Trying to load font information for T1+lmtt on input line 7
-44.
-(/Users/Sergio/Library/TinyTeX/texmf-dist/tex/latex/lm/t1lmtt.fd
-File: t1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
-) [27pdfTeX warning (ext4): destination with the same identifier (name{figure.2
-0}) has been already used, duplicate ignored
+<Cas2Final2_files/figure-latex/histpt-1.pdf, id=570, 568.1225pt x 277.035pt>
+File: Cas2Final2_files/figure-latex/histpt-1.pdf Graphic file (type pdf)
+<use Cas2Final2_files/figure-latex/histpt-1.pdf>
+Package pdftex.def Info: Cas2Final2_files/figure-latex/histpt-1.pdf  used on in
+put line 736.
+(pdftex.def)             Requested size: 469.7731pt x 229.07663pt.
+[27pdfTeX warning (ext4): destination with the same identifier (name{figure.20}
+) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.763 \end{verbatim}
-                     <./Cas2Final2_files/figure-latex/USDVisualizeEnsembleForec
-ast-1.pdf>]
-<Cas2Final2_files/figure-latex/plotoutlier-1.pdf, id=587, 557.08125pt x 240.9pt
+l.742 
+       <./Cas2Final2_files/figure-latex/USDVisualizeEnsembleForecast-1.pdf>]
+LaTeX Font Info:    Trying to load font information for T1+lmtt on input line 7
+47.
+(/Users/Sergio/Library/TinyTeX/texmf-dist/tex/latex/lm/t1lmtt.fd
+File: t1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+) [28pdfTeX warning (ext4): destination with the same identifier (name{figure.2
+1}) has been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.799 \end{verbatim}
+                     <./Cas2Final2_files/figure-latex/histpt-1.pdf>]
+<Cas2Final2_files/figure-latex/usd_pt-1.pdf, id=598, 546.04pt x 212.795pt>
+File: Cas2Final2_files/figure-latex/usd_pt-1.pdf Graphic file (type pdf)
+<use Cas2Final2_files/figure-latex/usd_pt-1.pdf>
+Package pdftex.def Info: Cas2Final2_files/figure-latex/usd_pt-1.pdf  used on in
+put line 801.
+(pdftex.def)             Requested size: 469.76022pt x 183.0683pt.
+[29]
+<Cas2Final2_files/figure-latex/usd_pt-2.pdf, id=603, 537.00626pt x 249.93375pt>
+
+File: Cas2Final2_files/figure-latex/usd_pt-2.pdf Graphic file (type pdf)
+<use Cas2Final2_files/figure-latex/usd_pt-2.pdf>
+Package pdftex.def Info: Cas2Final2_files/figure-latex/usd_pt-2.pdf  used on in
+put line 803.
+(pdftex.def)             Requested size: 469.75641pt x 218.63428pt.
+[30 <./Cas2Final2_files/figure-latex/usd_pt-1.pdf> <./Cas2Final2_files/figure-l
+atex/usd_pt-2.pdf>] [31]
+<Cas2Final2_files/figure-latex/usd_pt-3.pdf, id=628, 574.145pt x 215.80624pt>
+File: Cas2Final2_files/figure-latex/usd_pt-3.pdf Graphic file (type pdf)
+<use Cas2Final2_files/figure-latex/usd_pt-3.pdf>
+Package pdftex.def Info: Cas2Final2_files/figure-latex/usd_pt-3.pdf  used on in
+put line 885.
+(pdftex.def)             Requested size: 469.76819pt x 176.57368pt.
+[32] [33 <./Cas2Final2_files/figure-latex/usd_pt-3.pdf>]
+<Cas2Final2_files/figure-latex/plotoutlier-1.pdf, id=646, 557.08125pt x 240.9pt
 >
 File: Cas2Final2_files/figure-latex/plotoutlier-1.pdf Graphic file (type pdf)
 <use Cas2Final2_files/figure-latex/plotoutlier-1.pdf>
 Package pdftex.def Info: Cas2Final2_files/figure-latex/plotoutlier-1.pdf  used 
-on input line 767.
+on input line 931.
 (pdftex.def)             Requested size: 469.76414pt x 203.14124pt.
-[28pdfTeX warning (ext4): destination with the same identifier (name{figure.21}
+[34pdfTeX warning (ext4): destination with the same identifier (name{figure.22}
 ) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.796 \end{verbatim}
-                     <./Cas2Final2_files/figure-latex/plotoutlier-1.pdf>] [29] 
-[30] (./Cas2Final2.aux
+l.975 
+       <./Cas2Final2_files/figure-latex/plotoutlier-1.pdf>] [35] (./Cas2Final2.
+aux
 LaTeX Info: Redefining \. on input line 25.
 LaTeX Info: Redefining \% on input line 25.
 )
@@ -955,10 +989,10 @@ Package rerunfilecheck Info: File `Cas2Final2.out' has not changed.
 (rerunfilecheck)             Checksum: 261F0F8221889B11DF1C3D58B98DBB3E;4229.
  ) 
 Here is how much of TeX's memory you used:
- 14681 strings out of 480229
- 245565 string characters out of 5894357
- 649865 words of memory out of 5000000
- 32198 multiletter control sequences out of 15000+600000
+ 14724 strings out of 480229
+ 247249 string characters out of 5894357
+ 648077 words of memory out of 5000000
+ 32231 multiletter control sequences out of 15000+600000
  533099 words of font info for 74 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  68i,15n,77p,856b,645s stack positions out of 5000i,500n,10000p,200000b,80000s
@@ -998,10 +1032,10 @@ rgio/Library/TinyTeX/texmf-dist/fonts/type1/public/lm/lmri10.pfb></Users/Sergio
 ary/TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy10.pfb></Users/Sergio/Library/
 TinyTeX/texmf-dist/fonts/type1/public/lm/lmsy7.pfb></Users/Sergio/Library/TinyT
 eX/texmf-dist/fonts/type1/public/lm/lmtt10.pfb>
-Output written on Cas2Final2.pdf (30 pages, 834932 bytes).
+Output written on Cas2Final2.pdf (35 pages, 867436 bytes).
 PDF statistics:
- 726 PDF objects out of 1000 (max. 8388607)
- 588 compressed objects within 6 object streams
- 131 named destinations out of 1000 (max. 500000)
- 303 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 783 PDF objects out of 1000 (max. 8388607)
+ 627 compressed objects within 7 object streams
+ 137 named destinations out of 1000 (max. 500000)
+ 323 words of extra memory for PDF output out of 10000 (max. 10000000)
 
